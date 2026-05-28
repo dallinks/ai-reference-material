@@ -3,10 +3,115 @@ export default
       id: "m5", number: "05", title: "AI Agents", accent: "#FFB800",
       desc: "Autonomous systems that plan, use tools, and execute multi-step workflows.",
       lessons: [
-        { id: "m5l1", title: "Agent Architecture", duration: "11 min", tags: ["agents","architecture","patterns"],
+        { id: "m5l1", title: "Agent Architecture", duration: "26 min", tags: ["agents","architecture","patterns","react","reflexion","plan-and-execute","internals"],
           content: [
-            { type: "text", heading: "What Makes an Agent", body: "An AI agent is an LLM with a loop. It can take actions, observe results, and iterate.\n\n**Simple LLM:** Input → Model → Output (one shot)\n**Agent:** Goal → Plan → Action → Observation → Reasoning → ... → Final Answer\n\nAgents use tools: search, databases, code execution, APIs, file operations." },
-            { type: "text", heading: "The ReAct Pattern", body: "Reasoning + Acting — the most common agent architecture.\n\n1. **Thought** — Agent reasons about what to do\n2. **Action** — Agent selects and invokes a tool\n3. **Observation** — Agent receives tool output\n4. **Repeat** until task is complete\n\nThe loop gives agents adaptability that single LLM calls lack." },
+            { type: "text", heading: "What Makes an Agent", body: "An AI agent is an LLM with a loop. It can take actions, observe results, and iterate.\n\n**Simple LLM:** Input → Model → Output (one shot)\n**Agent:** Goal → Plan → Action → Observation → Reasoning → ... → Final Answer\n\nAgents use tools: search, databases, code execution, APIs, file operations. The distinguishing trait is non-determinism in *control flow*: the model itself decides what to do next, including when to stop — rather than the developer pre-wiring every branch." },
+
+            { type: "text", heading: "Agents vs Chains vs Workflows", body: "These three terms get used interchangeably and they shouldn't be.\n\n**Chain** — A fixed sequence of LLM calls. `extract → classify → respond`. The developer hardcodes the order. Predictable, cheap, easy to test. Most production \"AI features\" are chains, not agents.\n\n**Workflow** — A graph (often a DAG) with conditional edges. The developer defines every possible path; the LLM chooses which branch to take at each node. Adaptive within a known design space. Tools like LangGraph and Semantic Kernel Process Framework target this shape.\n\n**Agent** — No fixed graph. The model decides at every step which tool (if any) to call, with what arguments, and whether the task is done. Maximum flexibility, hardest to reason about, most expensive at runtime.\n\nRule of thumb: **prefer the simplest structure that solves the problem**. Most teams reach for \"an agent\" when a chain or workflow would be faster, cheaper, and more reliable. Agents earn their cost when the problem genuinely requires unconstrained tool choice over many steps." },
+
+            { type: "text", heading: "The Anatomy of an Agent", body: "Every agent — whether you build it from scratch or use a framework — has the same six parts:\n\n**1. Model** — The LLM that emits each decision. The brain.\n\n**2. Tool catalog** — The functions the model is allowed to call. Defined by JSON Schemas. (See m5l2.) The hands.\n\n**3. Scratchpad / message history** — The running record of user input, model output, tool calls, and tool results. This list IS the agent's working memory at runtime. The agent has no other state between turns.\n\n**4. Long-term memory** (optional) — External storage the agent can read from / write to: vector DBs for retrieval, key-value stores for facts, structured DBs for prior decisions. Distinct from the scratchpad in that it persists across runs and can exceed the context window.\n\n**5. Loop controller** — Your code that drives the cycle: call model → inspect output → execute tools → append results → repeat. This is the part most people forget exists. The model is stateless; the agent loop is where \"agency\" actually lives.\n\n**6. Stop condition** — When does the loop end? Max-turns, a special \"finish\" tool, no more tool calls in the last response, external interrupt. Without a deliberate stop condition, agents either halt arbitrarily or run forever." },
+
+            { type: "text", heading: "The Agent Loop — What Actually Runs", body: "The LLM is stateless. It does not \"think\" between turns. It does not \"wake up\" when a tool result comes back. It exists only during a single model call.\n\nAgency is an illusion produced by your harness code, which:\n\n1. Sends the current message history + tool catalog to the model\n2. Receives the model's reply (text and/or tool-call blocks)\n3. Appends that reply to the history\n4. If the reply contains tool calls: executes each, appends results to history, jumps back to step 1\n5. If the reply has no tool calls (or a stop condition trips): exits the loop and returns the final text to the user\n\nThat's it. There is no daemon, no persistent agent process, no \"the agent is now thinking\" state. Every turn is a fresh model call that re-reads the entire history from scratch.\n\nThis has three big consequences:\n\n• **Context length is everything.** As the scratchpad grows, latency rises, cost rises, and eventually the model loses track of early steps.\n\n• **Determinism is in your hands.** The model is non-deterministic; the loop, retry policy, timeouts, and stop conditions are entirely your code's responsibility.\n\n• **Replay is free.** Save every model input + output. You can re-run any past agent execution offline by replaying its history — no special debugger needed." },
+
+            { type: "code", heading: "A Minimal Agent Loop in 40 Lines (Python, No Framework)", lang: "python", code: `# This is the entire agent pattern. Every framework is a wrapper around this loop.
+
+from anthropic import Anthropic
+import json
+
+client = Anthropic()
+TOOLS = [
+    {
+        "name": "get_weather",
+        "description": "Get current weather for a city.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"],
+        },
+    }
+]
+TOOL_IMPL = {"get_weather": lambda city: {"temp_c": 18, "conditions": "rain", "city": city}}
+
+def run_agent(user_goal, max_turns=10):
+    # The scratchpad. This IS the agent's runtime state.
+    history = [{"role": "user", "content": user_goal}]
+
+    for turn in range(max_turns):
+        # --- Step 1: Ask the model what to do next ---
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            tools=TOOLS,
+            messages=history,
+        )
+        history.append({"role": "assistant", "content": response.content})
+
+        # --- Step 2: Stop condition — no more tool calls means we're done ---
+        if response.stop_reason == "end_turn":
+            return next((b.text for b in response.content if b.type == "text"), "")
+
+        # --- Step 3: Execute every tool call, append results ---
+        tool_results = []
+        for block in response.content:
+            if block.type != "tool_use":
+                continue
+            try:
+                result = TOOL_IMPL[block.name](**block.input)
+                tool_results.append({"type": "tool_result", "tool_use_id": block.id,
+                                     "content": json.dumps(result)})
+            except Exception as e:
+                tool_results.append({"type": "tool_result", "tool_use_id": block.id,
+                                     "content": f"Error: {e}", "is_error": True})
+        history.append({"role": "user", "content": tool_results})
+
+    raise RuntimeError(f"Agent did not finish within {max_turns} turns")` },
+
+            { type: "text", heading: "The ReAct Pattern", body: "**Re**asoning + **Act**ing — the most common agent architecture, introduced in the 2022 ReAct paper.\n\n1. **Thought** — Agent reasons about what to do\n2. **Action** — Agent selects and invokes a tool\n3. **Observation** — Agent receives tool output\n4. **Repeat** until task is complete\n\nOriginally, ReAct was a *prompting strategy*: you'd instruct the model to emit `Thought: ...` then `Action: ...` then `Observation: ...` in plain text, then parse it. Modern agents replace the plain-text Action step with structured function calls, but the underlying pattern is identical.\n\nWhy ReAct works: forcing the model to verbalize a Thought before an Action improves tool choice. Forcing it to verbalize an Observation after a tool result improves the next decision. The loop gives the model space to course-correct that single-shot prompting cannot." },
+
+            { type: "code", heading: "ReAct Trace — What the Model Actually Sees", lang: "text", code: `Turn 1:
+  history sent to model:
+    user: "Should I bring an umbrella to my Seattle meeting tomorrow?"
+  model response (stop_reason: tool_use):
+    text:     "I'll check the Seattle weather forecast for tomorrow."
+    tool_use: get_weather(city="Seattle")
+
+Turn 2:
+  history sent to model (note: full Turn 1 included):
+    user:      "Should I bring an umbrella to my Seattle meeting tomorrow?"
+    assistant: text + tool_use(get_weather, city="Seattle")
+    user:      tool_result(toolu_01..., {"temp_c": 11, "conditions": "rain"})
+  model response (stop_reason: end_turn):
+    text: "Yes — Seattle's forecast shows rain at 11°C. Bring the umbrella."
+
+Two model calls. One tool execution. The model never "remembered" turn 1 in turn 2 —
+your loop physically replayed the entire history. The model's "reasoning" is just
+its next-token prediction over that history.
+
+The "Thought" text in turn 1 ("I'll check the Seattle weather forecast...") is not
+required for the tool call to work. It exists because verbalized reasoning improves
+the quality of the action that follows it — and because it's useful for you when
+debugging.` },
+
+            { type: "text", heading: "Plan-and-Execute", body: "ReAct decides one step at a time. **Plan-and-Execute** splits the agent into two roles:\n\n**Planner** (called once) — Reads the goal and produces an ordered list of steps. Often a stronger/more expensive model.\n\n**Executor** (called per step) — Runs each step with tool access. Often a cheaper model since each step is narrow.\n\n**Why use it:** Long-horizon tasks where planning ahead matters more than reacting to each result. Research tasks, multi-document analysis, code generation. Forces the agent to think about the *whole* problem before getting lost in the first step.\n\n**Why not use it:** Tasks where intermediate results genuinely change what should happen next. A rigid pre-baked plan is wrong if step 2's output invalidates step 3.\n\n**Common variant: Plan-and-Execute with Replan.** After every N steps (or on failure), re-invoke the planner with progress-so-far to revise the remaining plan. Combines forethought with adaptability at the cost of extra planner calls." },
+
+            { type: "text", heading: "Reflexion / Self-Critique", body: "Add an evaluation step after the agent produces an answer. A separate **critic prompt** grades the output against the original goal. If the critique is negative, the agent retries with the critique appended to its scratchpad.\n\n**Why it works:** LLMs are often better at spotting errors than avoiding them. A second model call asking \"is this answer actually correct and complete?\" catches a meaningful fraction of mistakes that a single-pass agent would ship.\n\n**Costs:** Roughly 2× the tokens per query in the happy path, more on retries. Only worth it for high-stakes outputs where wrong-but-confident is the failure mode you most need to avoid: legal/medical Q&A, code generation, financial calculations.\n\n**Variants:**\n• **Self-Reflexion** — Same model plays both roles with different prompts.\n• **Pair-of-models** — A larger model critiques a smaller model's output. Useful when the executor is cheap.\n• **Rubric-graded** — The critic checks specific criteria (\"did the answer cite a source?\", \"did it cover all parts of the question?\") rather than free-form judging." },
+
+            { type: "text", heading: "Hierarchical / Supervisor", body: "A **supervisor agent** doesn't do work directly — it routes to specialist sub-agents and synthesizes their results. Each specialist has its own narrower tool catalog and focused system prompt.\n\nWhy: a single agent with 30 tools picks the wrong one constantly and burns context on irrelevant tool descriptions. Three specialists with 10 tools each, behind a router, are more accurate and easier to reason about.\n\nThis is the dominant pattern at scale. We'll go deep on it in **m5l3 (Multi-Agent Systems)** — what to mention here is just that *single-agent* and *multi-agent* are architectural choices, not lifecycle stages. Some problems are inherently better as one big agent; some are inherently better as a team." },
+
+            { type: "decision", heading: "Choosing an Architecture", rows: [
+              ["Task is short and the action sequence is mostly deterministic", "Skip the agent — write a chain or a workflow. You don't need this."],
+              ["Task is open-ended; each step depends on the previous result", "ReAct. The default. Start here."],
+              ["Task is long and benefits from upfront thinking (research, multi-doc analysis)", "Plan-and-Execute (with replan if results may invalidate the plan)"],
+              ["Output correctness is critical and verifiable (code, math, structured extraction)", "Reflexion / self-critique loop, optionally with a separate critic model"],
+              ["Tool catalog exceeds ~15 tools or spans clearly distinct domains", "Hierarchical / supervisor with specialist sub-agents (see m5l3)"],
+              ["Tasks are short and parallelizable across independent inputs", "Many small agents in parallel; no orchestrator needed"],
+              ["You need strict, auditable, regulatable control flow", "Workflow (LangGraph / SK Process Framework), NOT an agent"],
+            ]},
+
+            { type: "text", heading: "State, Memory, and the Context Window", body: "The scratchpad grows every turn: user message + assistant reply + tool calls + tool results all stack up. By turn 8 of a tool-heavy agent, you might be sending 30K tokens per call. By turn 20, you may have blown past the model's context limit entirely.\n\nFour mitigation strategies, in increasing order of complexity:\n\n**1. Bound the loop.** Hard max on turns. Hard max on tokens per response. Tools return ≤4KB. Most agents finish in 3–7 turns; agents going past 15 are usually broken.\n\n**2. Trim the scratchpad.** Keep the last N turns verbatim; drop or summarize earlier ones. Risk: dropping the user's original goal. Always keep the first user message intact.\n\n**3. Summarize on overflow.** When history exceeds a threshold, call the model to compress middle turns into a structured summary, replace those turns with the summary, continue. Cheap-ish and surprisingly effective. This is how Claude Code's compaction works.\n\n**4. External long-term memory.** Write structured facts to a DB or vector store as the agent runs (`remember(\"user prefers metric units\")`). At each turn, retrieve the K most relevant memories and inject them into the system prompt. Decouples runtime context from persistent state. Required for agents that span sessions." },
+
+            { type: "text", heading: "Stopping Conditions", body: "How an agent decides it's done is the single most underappreciated architectural choice. Get it wrong and your agent either quits with the job half-finished or runs in circles forever.\n\nThe options, in order of how much you should default to each:\n\n**1. Max turns (always).** A hard cap (typically 10–25) on the number of model calls. Non-negotiable. Even if every other stop condition works, this is your safety net against runaway loops. On hitting it, return a clear \"didn't finish\" message — never silently give a partial answer as if it were final.\n\n**2. No tool calls in last response.** The most natural signal: the model emitted only text, with no `tool_use`. Treat this as \"the model thinks it's answering the user.\" Works well with modern function-calling APIs.\n\n**3. Explicit `finish_task` tool.** Define a tool the model calls to declare completion: `finish_task(answer, confidence)`. Forces a structured exit and gives you a place to enforce acceptance criteria (\"answer must be non-empty\", \"confidence must be > 0.7\"). Best for high-stakes agents.\n\n**4. Repeated-state detection.** Track `(tool_name, arguments)` tuples. If the model calls the same tool with the same arguments twice in a row, you're in a doom loop — inject a system note and force a different action, or bail out.\n\n**5. External signals.** User interrupt, deadline timer, parent-agent abort. Always handle these — long-running agents WILL be cancelled mid-flight." },
+
             { type: "code", heading: "ReAct Agent — Semantic Kernel (C#)", lang: "csharp", code: `using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -43,9 +148,9 @@ public class CustomerPlugin
         [Description("Refund reason")] string reason)
     {
         // Your refund logic — this is a consequential action!
-        return JsonSerializer.Serialize(new { 
+        return JsonSerializer.Serialize(new {
             status = "pending_approval",
-            orderId, reason 
+            orderId, reason
         });
     }
 }
@@ -76,6 +181,7 @@ history.AddUserMessage("Customer jane@example.com wants a refund on her last ord
 // The agent will: 1) look up customer, 2) get orders, 3) issue refund
 var result = await chat.GetChatMessageContentAsync(
     history, settings, kernel);` },
+
             { type: "code", heading: "ReAct Agent — LangGraph (Python)", lang: "python", code: `from langchain_openai import AzureChatOpenAI
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
@@ -97,7 +203,7 @@ def get_orders(customer_id: int) -> str:
         .limit(5).all()
     return json.dumps([o.to_dict() for o in orders])
 
-@tool  
+@tool
 def issue_refund(order_id: int, reason: str) -> str:
     """Issue a refund for an order. Returns pending status."""
     return json.dumps({
@@ -122,7 +228,26 @@ result = agent.invoke({
     "messages": [
         ("user", "Customer jane@example.com wants a refund on her last order")
     ]
-})` }
+})` },
+
+            { type: "text", heading: "Observability: You Cannot Debug What You Cannot See", body: "Agents fail in ways stack traces don't capture. The model picked the wrong tool. The model's argument was almost-but-not-quite right. The summary turn dropped a critical fact. None of these throw exceptions — they just produce a worse answer.\n\nMinimum viable agent observability — log per turn:\n\n• The exact `messages` array sent to the model (after any compaction)\n• The model's full response: text blocks, tool_use blocks, stop reason, token counts\n• Each tool invocation: name, arguments, result, duration, error if any\n• The total elapsed time and total tokens for the run\n• A correlation ID linking every turn of one user-facing request\n\nWith this, you can replay any failed run offline: feed the same history back to the model, see if the same wrong choice repeats, then iterate on the system prompt or schema in isolation.\n\nTooling: **LangSmith** (LangChain-native), **Weights & Biases Traces**, **Arize Phoenix**, **Anthropic's built-in `trace_id` + console**. For DIY: OpenTelemetry has GenAI semantic conventions — your existing APM (Datadog, Honeycomb, Application Insights) already understands them.\n\nIf you only do one thing for production readiness: ship structured logging of every turn before you ship the agent." },
+
+            { type: "text", heading: "Failure Modes & Architectural Antidotes", body: "**Doom loop.** Same tool, same arguments, repeatedly. *Antidote:* repeated-state detection in the loop; inject \"you already called X with these args and got Y — try something different.\"\n\n**Premature stop.** Model says \"I'm done\" while the task is half-finished. *Antidote:* an explicit `finish_task` tool with arguments that act as acceptance criteria the model has to fill in (\"summary\", \"confidence\", \"all_subtasks_complete: bool\").\n\n**Token explosion.** Scratchpad outgrows the context window mid-run. *Antidote:* trim or summarize on a token threshold; cap tool results at 4KB; paginate large data.\n\n**Wrong abstraction.** Plan-and-Execute used on a task whose plan needs constant revision; or ReAct used on a task that genuinely needs upfront planning. *Antidote:* re-read the architecture-choice table above. Migrate.\n\n**Tool-choice churn.** Agent flips between two tools without progress. *Antidote:* fewer, more orthogonal tools; sharper descriptions; in the worst case, a hierarchical supervisor that routes to a specialist.\n\n**Silent tool failures.** Tool returned an error envelope the model didn't notice, agent confidently fabricates an answer. *Antidote:* error envelopes that say \"Error: ... — suggested action: ...\" (per m5l2). Reflexion can also catch these post-hoc.\n\n**Untraceable production bug.** Agent gives a bad answer once and nobody can reproduce it. *Antidote:* full per-turn logging from day one. Without it, you're flying blind." },
+
+            { type: "checklist", heading: "Production Agent Architecture Checklist", items: [
+              "The architecture choice (chain / workflow / agent / hierarchy) is documented with the reason it was chosen",
+              "A hard max-turns cap is set; hitting it produces a clear 'did not finish' response, never a silent partial answer",
+              "Stop conditions beyond max-turns are explicit: natural end-turn, finish_task tool, repeated-state detection",
+              "Every model call's input and output is logged with a correlation ID — full replay is possible",
+              "Per-turn token counts and latencies are emitted as metrics; cost-per-run is dashboarded",
+              "Scratchpad has a defined trim or summarize strategy; long runs don't blow the context window",
+              "Tool catalog size is bounded (<15 per agent ideal); larger surfaces are split via supervisor/specialist split",
+              "Repeated-state detection (same tool + args) is implemented; loops break out with a system note",
+              "Tools never throw uncaught exceptions to the loop — every failure becomes a structured error tool_result",
+              "Consequential actions require a confirmation step (preview tool, then commit tool) — the model cannot delete/pay/send in one shot",
+              "An eval set of historical runs exists; changes to prompts/models are validated against it before rolling out",
+              "User-facing errors say what happened in plain language ('I was unable to finish this in time'), not stack traces",
+            ]}
           ]
         },
         { id: "m5l2", title: "Tool Design & Function Calling", duration: "28 min", tags: ["agents","tools","function-calling","mcp","internals"],
