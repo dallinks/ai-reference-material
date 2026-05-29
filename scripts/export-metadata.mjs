@@ -6,6 +6,7 @@
 //   export/course-metadata.md    — human-readable stats + curriculum + listing fields
 
 import { COURSE, totalLessons, allTags } from "../src/data/index.js";
+import { LEARNING_PATHS, CAPSTONE } from "../src/data/paths.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,9 +48,21 @@ function build() {
       decisionTables: decisions,
       diagrams,
       freePreviewLessons: preview,
+      learningPaths: LEARNING_PATHS.length,
       tags: allTags.length,
     },
     modules,
+    paths: LEARNING_PATHS.map((p) => ({
+      id: p.id,
+      title: p.title,
+      audience: p.audience,
+      lessonCount: p.lessonIds.length,
+    })),
+    capstone: {
+      title: CAPSTONE.title,
+      stages: CAPSTONE.stages.length,
+      lessonCount: CAPSTONE.stages.reduce((n, s) => n + s.lessonIds.length, 0),
+    },
   };
 }
 
@@ -67,7 +80,11 @@ function toMd(meta) {
   L.push(`- **Decision tables:** ${s.decisionTables}`);
   L.push(`- **Diagrams:** ${s.diagrams}`);
   L.push(`- **Free-preview lessons:** ${s.freePreviewLessons}`);
+  L.push(`- **Learning paths:** ${s.learningPaths} (+ 1 capstone project)`);
   L.push(`- **Topic tags:** ${s.tags}`, "");
+  L.push("## Learning paths & capstone", "");
+  for (const p of meta.paths) L.push(`- **${p.title}** (${p.audience}) — ${p.lessonCount} lessons`);
+  L.push(`- **${meta.capstone.title}** — ${meta.capstone.stages} stages, ${meta.capstone.lessonCount} lessons`, "");
   L.push("## Curriculum", "");
   L.push("| # | Module | Lessons | Time |", "| --- | --- | --- | --- |");
   for (const m of meta.modules) L.push(`| ${m.number} | ${m.title} | ${m.lessonCount} | ${m.minutes} min |`);

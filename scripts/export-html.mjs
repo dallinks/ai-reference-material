@@ -8,6 +8,7 @@
 //   export/import-map.csv                  — section/lesson plan + free-preview flags
 
 import { COURSE } from "../src/data/index.js";
+import { LEARNING_PATHS, CAPSTONE } from "../src/data/paths.js";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,6 +110,63 @@ ${body}
 
 const csvField = (s) => `"${String(s).replace(/"/g, '""')}"`;
 
+function pageShell(title, bodyHtml) {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<style>${STYLE}</style></head>
+<body>
+${bodyHtml}
+</body></html>
+`;
+}
+
+// Lesson ids -> title/module/duration, so paths and capstone can name lessons.
+// (No cross-file links: pasted LMS pages can't resolve relative paths.)
+function buildLessonIndex() {
+  const idx = new Map();
+  for (const mod of COURSE.modules) {
+    for (const lesson of mod.lessons) {
+      idx.set(lesson.id, { title: lesson.title, duration: lesson.duration, modNumber: mod.number });
+    }
+  }
+  return idx;
+}
+
+function refLi(idx, id, withDuration) {
+  const r = idx.get(id);
+  if (!r) return "";
+  const tail = withDuration ? ` · ${esc(r.duration)}` : "";
+  return `<li>${esc(r.title)} <span class="meta">— Module ${esc(r.modNumber)}${tail}</span></li>`;
+}
+
+function pathsToHtmlPage(idx) {
+  let b =
+    `<h1>How to Use This Course</h1>\n` +
+    `<p>This is a <strong>reference course</strong> — every lesson stands alone, so you can read in any order. ` +
+    `If you'd rather follow a guided route, pick the path that matches your role, then tackle the capstone to put it all together.</p>`;
+  for (const p of LEARNING_PATHS) {
+    b += `\n<h2>${esc(p.title)} — ${esc(p.audience)}</h2>\n<p>${esc(p.desc)}</p>\n<ol>\n`;
+    b += p.lessonIds.map((id) => refLi(idx, id, true)).join("\n");
+    b += `\n</ol>`;
+  }
+  return pageShell("How to Use This Course", b);
+}
+
+function capstoneToHtmlPage(idx) {
+  let b =
+    `<h1>${esc(CAPSTONE.title)}</h1>\n<p class="meta">Capstone project</p>\n` +
+    `<p>${esc(CAPSTONE.scenario)}</p>`;
+  for (const s of CAPSTONE.stages) {
+    b += `\n<h2>${esc(s.title)}</h2>\n<p>${esc(s.goal)}</p>\n<ul>\n`;
+    b += s.lessonIds.map((id) => refLi(idx, id, false)).join("\n");
+    b += `\n</ul>`;
+  }
+  b += `\n<h2>Deliverable</h2>\n<p>${inline(CAPSTONE.deliverable)}</p>`;
+  return pageShell(CAPSTONE.title, b);
+}
+
 async function main() {
   await rm(OUT, { recursive: true, force: true });
   await mkdir(OUT, { recursive: true });
@@ -120,6 +178,17 @@ async function main() {
   ];
   const writes = [];
   let lessonCount = 0;
+
+  // Getting Started page (learning paths) — first section, free preview.
+  const idx = buildLessonIndex();
+  const gsDir = "00-getting-started";
+  await mkdir(join(OUT, gsDir), { recursive: true });
+  writes.push(writeFile(join(OUT, gsDir, "learning-paths.html"), pathsToHtmlPage(idx)));
+  csv.push(
+    ["00", "Getting Started", 1, "How to Use This Course — Learning Paths", "", "YES", `html/${gsDir}/learning-paths.html`]
+      .map(csvField)
+      .join(",")
+  );
 
   for (const mod of COURSE.modules) {
     const modDir = `${mod.number}-${slug(mod.title)}`;
@@ -140,11 +209,21 @@ async function main() {
     });
   }
 
+  // Capstone page — final section.
+  const capDir = "10-capstone";
+  await mkdir(join(OUT, capDir), { recursive: true });
+  writes.push(writeFile(join(OUT, capDir, "capstone.html"), capstoneToHtmlPage(idx)));
+  csv.push(
+    ["10", "Capstone Project", 1, CAPSTONE.title, "", "", `html/${capDir}/capstone.html`]
+      .map(csvField)
+      .join(",")
+  );
+
   await Promise.all(writes);
   await writeFile(join(ROOT, "export", "import-map.csv"), csv.join("\n") + "\n");
 
   const previewCount = COURSE.modules.flatMap((m) => m.lessons).filter((l) => l.preview).length;
-  console.log(`Exported ${lessonCount} HTML lessons (${previewCount} free-preview)`);
+  console.log(`Exported ${lessonCount} HTML lessons (${previewCount} free-preview) + learning paths + capstone`);
   console.log(`Import map: export/import-map.csv`);
 }
 
