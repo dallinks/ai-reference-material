@@ -5,6 +5,8 @@ import { useSearch } from "./hooks/useSearch.js";
 import { HomeView } from "./views/HomeView.jsx";
 import { ModuleView } from "./views/ModuleView.jsx";
 import { LessonView } from "./views/LessonView.jsx";
+import { AssessmentView } from "./views/AssessmentView.jsx";
+import { PathView } from "./views/PathView.jsx";
 
 function Loading() {
   return (
@@ -32,7 +34,7 @@ function Loading() {
 }
 
 export default function App() {
-  const { view, activeMod, activeLesson, contentRef, go } = useNavigation();
+  const { view, activeMod, activeLesson, activePath, contentRef, go } = useNavigation();
   const { completed, ready, toggle, markDone } = useProgress();
   const search = useSearch();
 
@@ -50,6 +52,14 @@ export default function App() {
         contentRef={contentRef}
       />
     );
+  }
+
+  if (view === "assessment" && activeMod) {
+    return <AssessmentView mod={activeMod} onGo={go} />;
+  }
+
+  if (view === "path" && activePath) {
+    return <PathView path={activePath} completed={completed} onGo={go} />;
   }
 
   if (view === "module" && activeMod) {

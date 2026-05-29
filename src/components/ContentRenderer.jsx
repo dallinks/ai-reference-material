@@ -2,6 +2,7 @@ import { theme } from "../theme.js";
 import { CodeBlock } from "./CodeBlock.jsx";
 import { Checklist } from "./Checklist.jsx";
 import { DecisionTable } from "./DecisionTable.jsx";
+import { DiagramBlock } from "./DiagramBlock.jsx";
 
 function TextBlock({ heading, body, accent }) {
   return (
@@ -27,12 +28,19 @@ function TextBlock({ heading, body, accent }) {
           whiteSpace: "pre-line",
         }}
       >
-        {body.split(/(\*\*.*?\*\*)/g).map((part, j) => {
+        {body.split(/(\*\*.*?\*\*|\*[^*]+\*)/g).map((part, j) => {
           if (part.startsWith("**") && part.endsWith("**")) {
             return (
               <strong key={j} style={{ color: theme.text, fontWeight: 600 }}>
                 {part.slice(2, -2)}
               </strong>
+            );
+          }
+          if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+            return (
+              <em key={j} style={{ fontStyle: "italic" }}>
+                {part.slice(1, -1)}
+              </em>
             );
           }
           return <span key={j}>{part}</span>;
@@ -59,6 +67,18 @@ export function ContentRenderer({ items, accent }) {
     }
     if (item.type === "decision") {
       return <DecisionTable key={i} heading={item.heading} rows={item.rows} />;
+    }
+    if (item.type === "diagram") {
+      return (
+        <DiagramBlock
+          key={i}
+          heading={item.heading}
+          variant={item.variant}
+          nodes={item.nodes}
+          caption={item.caption}
+          accent={accent}
+        />
+      );
     }
     return (
       <TextBlock key={i} heading={item.heading} body={item.body} accent={accent} />

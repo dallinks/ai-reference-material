@@ -1,5 +1,6 @@
 import { theme } from "../theme.js";
 import { COURSE, totalLessons, allTags } from "../data/index.js";
+import { LEARNING_PATHS, CAPSTONE } from "../data/paths.js";
 
 function TypeChip({ kind, label }) {
   const tint = theme.chip[kind] || theme.chip.neutral;
@@ -238,6 +239,121 @@ function ModuleGrid({ completed, onGo }) {
   );
 }
 
+function PathCard({ path, completed, onGo }) {
+  const done = path.lessonIds.filter((id) => completed.has(id)).length;
+  const total = path.lessonIds.length;
+  return (
+    <div
+      onClick={() => onGo("path", null, null, path)}
+      style={{
+        padding: "18px 18px 16px",
+        background: theme.surface,
+        border: `1px solid ${theme.border}`,
+        borderTop: `2px solid ${path.accent}`,
+        borderRadius: theme.radius.xxl,
+        cursor: "pointer",
+        transition: "background 0.15s",
+        display: "flex",
+        flexDirection: "column",
+      }}
+      onMouseOver={(e) => (e.currentTarget.style.background = theme.surfaceHover)}
+      onMouseOut={(e) => (e.currentTarget.style.background = theme.surface)}
+    >
+      <div
+        style={{
+          fontFamily: theme.font.mono,
+          fontSize: 10,
+          letterSpacing: 1.5,
+          color: path.accent,
+          textTransform: "uppercase",
+          marginBottom: 6,
+        }}
+      >
+        {path.audience}
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 500, color: theme.textStrong, marginBottom: 6 }}>
+        {path.title}
+      </div>
+      <p style={{ fontSize: 13, color: theme.textFaint, lineHeight: 1.5, margin: "0 0 12px", flex: 1 }}>
+        {path.desc}
+      </p>
+      <div style={{ fontFamily: theme.font.mono, fontSize: 11, color: theme.textFaintest }}>
+        {total} lessons · {done}/{total} done
+      </div>
+    </div>
+  );
+}
+
+function LearningPaths({ completed, onGo }) {
+  const capIds = CAPSTONE.stages.flatMap((s) => s.lessonIds);
+  const capDone = capIds.filter((id) => completed.has(id)).length;
+
+  return (
+    <div style={{ marginBottom: 40 }}>
+      <div
+        style={{
+          fontFamily: theme.font.mono,
+          fontSize: 11,
+          letterSpacing: 2,
+          color: theme.textFaintest,
+          marginBottom: 14,
+        }}
+      >
+        NEW HERE? FOLLOW A PATH
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,240px),1fr))",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        {LEARNING_PATHS.map((p) => (
+          <PathCard key={p.id} path={p} completed={completed} onGo={onGo} />
+        ))}
+      </div>
+      <div
+        onClick={() => onGo("path", null, null, CAPSTONE)}
+        style={{
+          padding: "18px 20px",
+          background: `${CAPSTONE.accent}0d`,
+          border: `1px solid ${CAPSTONE.accent}40`,
+          borderRadius: theme.radius.xxl,
+          cursor: "pointer",
+          transition: "background 0.15s",
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+        }}
+        onMouseOver={(e) => (e.currentTarget.style.background = `${CAPSTONE.accent}1a`)}
+        onMouseOut={(e) => (e.currentTarget.style.background = `${CAPSTONE.accent}0d`)}
+      >
+        <div
+          style={{
+            fontSize: 22,
+            color: CAPSTONE.accent,
+            flexShrink: 0,
+          }}
+        >
+          ✦
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 500, color: theme.textStrong }}>
+            {CAPSTONE.title}
+          </div>
+          <div style={{ fontSize: 13, color: theme.textFaint, marginTop: 2 }}>
+            Build one real thing end-to-end, across every module.
+          </div>
+        </div>
+        <div style={{ fontFamily: theme.font.mono, fontSize: 11, color: CAPSTONE.accent }}>
+          {capDone}/{capIds.length} →
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HomeView({ completed, search, onGo }) {
   const pct = Math.round((completed.size / totalLessons) * 100);
   const results = search.results;
@@ -395,7 +511,10 @@ export function HomeView({ completed, search, onGo }) {
         {results ? (
           <SearchResultsList results={results} onGo={onGo} />
         ) : (
-          <ModuleGrid completed={completed} onGo={onGo} />
+          <>
+            <LearningPaths completed={completed} onGo={onGo} />
+            <ModuleGrid completed={completed} onGo={onGo} />
+          </>
         )}
       </div>
     </div>

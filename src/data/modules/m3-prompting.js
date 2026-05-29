@@ -255,7 +255,103 @@ def safe_handle(model_output: str) -> dict:
             ]}
           ]
         },
-        { id: "m3l4", title: "Prompt Cookbook", duration: "20 min", tags: ["prompting","patterns","cookbook","reference"],
+        { id: "m3l4", title: "Evaluation Fundamentals", duration: "20 min", tags: ["evaluation","testing","llm-as-judge","metrics","eval-sets","regression","fundamentals"],
+          content: [
+            { type: "text", heading: "Why Evaluation Is the Core Skill", body: "Everything in this course is a technique for steering a plausibility-predictor toward correctness. **Evaluation is how you know whether the steering worked.** Without it you are tuning prompts, swapping models, and changing retrieval on *vibes* — and vibes do not scale, do not survive a model upgrade, and cannot be handed to a teammate.\n\nThe discipline is simple to state: **turn \"this seems better\" into a number you trust.** Once you can do that, every other decision in the course becomes empirical instead of anecdotal — which prompt ships, which model is worth its price (m2l5), whether a RAG change helped (m4l6), whether an agent is reliable enough to deploy (m5l5), and whether today's production traffic still looks like yesterday's (m7l2).\n\nThis lesson is the spine those later, domain-specific eval lessons hang on. Learn the moves here once; you will apply them everywhere." },
+
+            { type: "text", heading: "The Eval Set Is the Asset", body: "An **eval set** is a curated collection of representative inputs, each paired with either an expected output or a rubric for grading. It is the single most valuable artifact you will build — more durable than any prompt, because prompts and models churn while a good eval set keeps paying off across every future change.\n\nHow to build one that actually predicts production quality:\n\n**Mine real traffic, don't invent it.** Synthetic examples miss the weird, messy inputs users actually send. Pull from logs (scrubbed of PII, m6l7).\n**Cover the head *and* the long tail.** Common cases prove it works; rare cases and known failures are where regressions hide. Deliberately include every bug you have ever fixed — that is your regression suite.\n**Label the hard cases.** Edge cases, ambiguous inputs, and \"should refuse\" cases matter more than easy wins.\n**Start small, grow deliberately.** 20–50 examples is enough to catch gross regressions on day one; grow toward hundreds as you learn where the model fails. A small *representative* set beats a large *skewed* one.\n**Freeze a holdout.** Keep some examples you never look at while iterating, so you are not just overfitting your prompt to the cases you stare at.\n\nUnder-investing here is the most common reason teams \"can't tell if it's getting better.\"" },
+
+            { type: "text", heading: "Offline vs Online Evaluation", body: "Two complementary regimes, and you need both.\n\n**Offline (pre-deploy)** — Run the system against your frozen eval set in CI. Fast, cheap, repeatable, and it gates releases: no change ships if it regresses the set. This is where most of your iteration happens. Its blind spot: it can only measure cases you thought to include.\n\n**Online (in production)** — Measure behavior on real traffic: A/B tests, canary rollouts, guardrail metrics, and user feedback (explicit thumbs, or implicit signals like edits, retries, and abandonment). This catches exactly what your offline set failed to represent — the distribution shift between your imagination and reality.\n\nThe loop closes when **online failures become new offline test cases.** A bug a user hits today should be a permanent entry in your eval set tomorrow, so it can never silently return." },
+
+            { type: "text", heading: "Three Families of Metrics", body: "Pick the cheapest method that actually captures what you care about.\n\n**1. Deterministic / structural** — Exact match, schema-valid JSON, regex match, \"contains X,\" numeric-within-tolerance, valid-against-allowed-set. Cheap, instant, perfectly reliable. Use these *whenever the output is constrained* — classification labels, extracted fields, routing decisions. If you can check it with code, never use a model to check it.\n\n**2. Reference-based similarity** — Compare output to a gold answer with BLEU/ROUGE (n-gram overlap) or embedding cosine similarity. Useful for translation and summarization, but weak for open-ended generation: there are many correct ways to phrase an answer, and surface overlap punishes valid paraphrases.\n\n**3. LLM-as-judge** — A strong model grades the output against a rubric. This is the workhorse for open-ended quality (helpfulness, faithfulness, tone) where exact match is meaningless and references are impractical. Powerful, scalable — and easy to misuse (next two blocks)." },
+
+            { type: "decision", heading: "Which Eval Method for Which Output?", rows: [
+              ["Classification / routing / intent label", "Exact match against the gold label — deterministic"],
+              ["Extracted fields (dates, amounts, IDs)", "Field-level exact match + schema validation"],
+              ["Must-be-valid JSON / code that must run", "Schema check / execute it — deterministic, not a judge"],
+              ["Summary, answer, rewrite, open-ended text", "LLM-as-judge with a rubric (validated against humans)"],
+              ["RAG answer (grounded in context)", "LLM-as-judge on the RAG triad — see m4l6"],
+              ["Agent that took multiple steps", "Trajectory + outcome eval — see m5l5"],
+              ["Translation / close-paraphrase task", "Reference similarity (BLEU/ROUGE/embedding) + spot-check"],
+              ["Subjective quality, high stakes", "Human evaluation to set the bar, then automate against it"],
+            ]},
+
+            { type: "text", heading: "LLM-as-Judge, Done Right", body: "An LLM judge is just another LLM call: give a strong model the input, the output, and a **rubric**, and have it return a structured verdict (a score plus a *reason*). It is the only way to evaluate open-ended generation at scale. But the judge is itself a fallible model, so treat its scores as measurements that must be validated, not as ground truth:\n\n**Validate against humans first.** Before trusting a judge, check that its scores correlate with human ratings on a sample. An unvalidated judge produces confident, precise, *wrong* numbers.\n**Use a separate, strong judge model.** Don't grade a model's output with the same model — shared blind spots inflate scores. A stronger judge grading a cheaper system-under-test is the reliable configuration.\n**Know the biases.** Judges favor longer and more confident answers, show **position bias** in comparisons (the first option wins too often — randomize order), and exhibit **self-preference** (they rate their own family's outputs higher). Same root cause as sycophancy (m2l3).\n**Prefer pairwise over absolute when you can.** \"Is A or B better?\" is more stable than \"score this 1–10,\" because absolute scales drift.\n**Always capture the reason.** A score with no rationale can't be debugged or trusted.\n\nUsed this way, LLM-as-judge is good enough to drive regression tests and A/Bs. The RAG triad in m4l6 is a worked example of this pattern; the reusable judge prompt template is in m3l5." },
+
+            { type: "code", heading: "A Minimal Eval Harness", lang: "python", code: `# A tiny but complete harness: deterministic checks for constrained output,
+# an LLM judge for open-ended quality, and a regression GATE you can put in CI.
+
+from anthropic import Anthropic
+import json, statistics
+
+client = Anthropic()
+
+# 1. The eval set: representative inputs + what "good" means for each.
+#    Mine these from real traffic; include every bug you've ever fixed.
+EVAL_SET = [
+    {"input": "reset my password",        "expect_intent": "account_help"},
+    {"input": "where is order #4471?",     "expect_intent": "order_status"},
+    {"input": "cancel and refund please",  "expect_intent": "billing"},
+    # ... 20-200 cases, including known failures and edge cases
+]
+
+# 2. Deterministic check — use whenever the output is constrained.
+def structural_score(case, output):
+    return 1.0 if output.get("intent") == case["expect_intent"] else 0.0
+
+# 3. LLM-as-judge — for open-ended text where exact match is meaningless.
+JUDGE_RUBRIC = """Score the REPLY from 1-5 on whether it correctly and helpfully
+answers the USER message. Penalize unsupported claims. Be strict.
+Return ONLY JSON: {"score": <int 1-5>, "reason": "<one sentence>"}"""
+
+def judge_score(user, reply):
+    r = client.messages.create(
+        model="claude-opus-4-6",                 # strong, SEPARATE judge model
+        max_tokens=300,
+        messages=[{"role": "user",
+                   "content": f"{JUDGE_RUBRIC}\\n\\nUSER: {user}\\nREPLY: {reply}"}],
+    )
+    verdict = json.loads(r.content[0].text)
+    return verdict["score"] / 5.0               # normalize to 0-1
+
+# 4. Run the set, aggregate, and GATE the release on it.
+def run_eval(classifier):
+    scores = [structural_score(c, classifier(c["input"])) for c in EVAL_SET]
+    mean = statistics.mean(scores)
+    print(f"intent accuracy: {mean:.1%}  (n={len(scores)})")
+    return mean
+
+BASELINE = 0.90                                  # the score the last shipped version got
+score = run_eval(my_classifier)
+assert score >= BASELINE, f"REGRESSION {score:.1%} < {BASELINE:.1%} — do not ship"` },
+
+            { type: "text", heading: "Human Evaluation: Still the Gold Standard", body: "Automated metrics are how you scale; **human evaluation is how you stay honest.** You need humans in three situations: bootstrapping a rubric (you can't automate a quality bar you haven't defined), validating that an LLM judge agrees with people, and grading high-stakes outputs where a wrong automated score is unacceptable.\n\nDo it properly: write an explicit rubric so different raters mean the same thing, use **multiple raters** per item, and measure **inter-rater agreement** — if your own humans don't agree, the task is underspecified and no automated metric will rescue it. Adjudicate disagreements; those hard cases are exactly what sharpens the rubric.\n\nHuman eval is slow and expensive, so spend it where it has leverage: **calibrating the cheap automated metrics you'll run thousands of times.** A few hundred careful human labels can validate a judge you then trust at scale." },
+
+            { type: "text", heading: "Eval-Driven Development", body: "Put it together and you get the AI equivalent of test-driven development:\n\n1. **Observe a failure** — from your eval set, a user report, or production monitoring.\n2. **Add it to the eval set** — as a permanent, labeled case. The bug is now a test.\n3. **Change exactly one thing** — a prompt, the model, retrieval, a parameter.\n4. **Re-run the whole set** — confirm the target case is fixed *and nothing else regressed*.\n5. **Ship only if the score went up with no regressions** — otherwise revert and try again.\n\nThis is what makes AI development cumulative instead of a game of whack-a-mole where every fix quietly breaks something else. It connects directly to CI/CD for AI (m7l4): the deployable unit is the `(code, prompt, model, index)` tuple, and the eval set is the gate it must pass. The eval set is also one of the compounding **platform investments** from m9l1 — it makes every future project faster to ship safely." },
+
+            { type: "diagram", heading: "The Eval-Driven Loop", variant: "cycle", nodes: [
+              { label: "Observe failure", detail: "set, user, or prod" },
+              { label: "Add to eval set", detail: "the bug is now a test" },
+              { label: "Change one thing", detail: "prompt / model / retrieval" },
+              { label: "Re-run evals", detail: "fixed + no regressions?" },
+              { label: "Ship or revert", detail: "gate on the score" },
+            ], caption: "TDD for AI: failures become permanent test cases, so quality only ratchets upward. Changing one variable at a time keeps the signal interpretable." },
+
+            { type: "text", heading: "Common Evaluation Mistakes", body: "**Evaluating on your examples.** If you tuned the prompt while staring at a case, that case no longer measures generalization. Keep a holdout.\n**One number for everything.** A single aggregate score hides where you're failing. Break results down by category, difficulty, and input type — the average can rise while your most important segment collapses.\n**A set too small or too skewed.** Five happy-path cases prove nothing. Representativeness matters more than size.\n**Trusting an unvalidated judge.** A precise number from a biased judge is still wrong — validate against humans before you believe it.\n**Only offline, or only online.** Offline misses real-world distribution; online alone means you discover regressions *after* users do. Use both.\n**A moving eval set.** If you change the set every release, scores aren't comparable across versions — you've lost your baseline. Version the set like code.\n**Optimizing the proxy (Goodhart's Law).** When a metric becomes the target, it stops measuring what you meant. Watch for the model gaming the letter of your rubric while missing its intent." },
+
+            { type: "checklist", heading: "Evaluation Essentials", items: [
+              "Build a representative eval set from real traffic before optimizing anything — it's the asset that compounds",
+              "Every fixed bug becomes a permanent eval case, so regressions can't silently return",
+              "Use deterministic checks for constrained output; reserve LLM-as-judge for open-ended quality",
+              "Validate any LLM judge against human ratings, and use a strong, separate judge model",
+              "Watch judge biases: length, position, and self-preference — randomize and prefer pairwise",
+              "Gate releases on the eval set in CI; ship only when the score rises with no regressions",
+              "Break scores down by segment — one average hides the failure that matters",
+              "Run both offline (catch regressions pre-ship) and online (catch what your set missed)",
+            ]}
+          ]
+        },
+        { id: "m3l5", title: "Prompt Cookbook", duration: "20 min", tags: ["prompting","patterns","cookbook","reference"],
           content: [
             { type: "text", heading: "How to Use This Cookbook", body: "Copy-pasteable prompt templates for common AI engineering tasks. Each template includes the system prompt, input format, and expected output format. Adapt the role, constraints, and examples to your domain." },
 

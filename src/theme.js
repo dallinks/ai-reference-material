@@ -41,6 +41,7 @@ export const theme = {
     code: { fg: "#7B61FF", bg: "rgba(123,97,255,0.1)" },
     checklist: { fg: "#00D4AA", bg: "rgba(0,212,170,0.1)" },
     decision: { fg: "#FFB800", bg: "rgba(255,184,0,0.1)" },
+    diagram: { fg: "#FF6B35", bg: "rgba(255,107,53,0.1)" },
     neutral: { fg: "#888", bg: "rgba(255,255,255,0.04)" },
   },
 
@@ -48,6 +49,12 @@ export const theme = {
   checklistBox: {
     bg: "rgba(0,212,170,0.04)",
     border: "rgba(0,212,170,0.12)",
+  },
+
+  // Quiz answer states (correct / wrong)
+  quiz: {
+    correct: { fg: "#00D4AA", bg: "rgba(0,212,170,0.12)", border: "rgba(0,212,170,0.5)" },
+    wrong: { fg: "#FF5C7A", bg: "rgba(255,51,102,0.12)", border: "rgba(255,51,102,0.5)" },
   },
 
   // Decision row tint (right column)

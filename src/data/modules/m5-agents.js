@@ -13,6 +13,13 @@ export default
 
             { type: "text", heading: "The Agent Loop — What Actually Runs", body: "The LLM is stateless. It does not \"think\" between turns. It does not \"wake up\" when a tool result comes back. It exists only during a single model call.\n\nAgency is an illusion produced by your harness code, which:\n\n1. Sends the current message history + tool catalog to the model\n2. Receives the model's reply (text and/or tool-call blocks)\n3. Appends that reply to the history\n4. If the reply contains tool calls: executes each, appends results to history, jumps back to step 1\n5. If the reply has no tool calls (or a stop condition trips): exits the loop and returns the final text to the user\n\nThat's it. There is no daemon, no persistent agent process, no \"the agent is now thinking\" state. Every turn is a fresh model call that re-reads the entire history from scratch.\n\nThis has three big consequences:\n\n• **Context length is everything.** As the scratchpad grows, latency rises, cost rises, and eventually the model loses track of early steps.\n\n• **Determinism is in your hands.** The model is non-deterministic; the loop, retry policy, timeouts, and stop conditions are entirely your code's responsibility.\n\n• **Replay is free.** Save every model input + output. You can re-run any past agent execution offline by replaying its history — no special debugger needed." },
 
+            { type: "diagram", heading: "The Agent Loop", variant: "cycle", nodes: [
+              { label: "Model call", detail: "reads full history" },
+              { label: "Tool calls?", detail: "yes → act, no → done" },
+              { label: "Execute", detail: "run the tools" },
+              { label: "Append", detail: "results → history" },
+            ], caption: "The loop is your code, not the model. The LLM is stateless — it re-reads the entire scratchpad every turn, which is why context length, retries, and the stop condition are all your responsibility." },
+
             { type: "code", heading: "A Minimal Agent Loop in 40 Lines (Python, No Framework)", lang: "python", code: `# This is the entire agent pattern. Every framework is a wrapper around this loop.
 
 from anthropic import Anthropic
@@ -656,10 +663,18 @@ null                             // sometimes 😱
             ]}
           ]
         },
-        { id: "m5l3", title: "Multi-Agent Systems", duration: "10 min", tags: ["agents","multi-agent","patterns"],
+        { id: "m5l3", title: "Multi-Agent Systems", duration: "17 min", tags: ["agents","multi-agent","patterns","orchestration","handoffs"],
           content: [
             { type: "text", heading: "Why Multiple Agents?", body: "Single agents hit limits on complex tasks. Multi-agent systems divide and conquer.\n\n**Specialization** — Each agent has focused prompt + tools\n**Parallelism** — Independent subtasks run simultaneously\n**Quality control** — One generates, another evaluates" },
+
+            { type: "text", heading: "When NOT to Use Multiple Agents", body: "Multi-agent systems are seductive and usually premature. Every agent you add multiplies cost (more LLM calls), latency (more sequential steps), and failure surface (more places to break, harder to debug). A *single* well-designed agent with good tools (m5l1, m5l2) beats a multi-agent system on most tasks.\n\nReach for multiple agents only when one of these is genuinely true:\n\n**Specialization pays** — Subtasks need distinct tools, prompts, or even models, and cramming them into one agent confuses it.\n**Parallelism helps** — Independent subtasks can run simultaneously to cut wall-clock time.\n**Independent verification matters** — You want one agent to generate and a *separate* one to check, so the checker isn't biased by the generator's reasoning.\n\nIf none of these apply, the honest answer is: use one agent. \"Multi-agent\" is an architecture, not a maturity level — more agents is not more sophisticated, it's more to go wrong." },
+
             { type: "text", heading: "Common Patterns", body: "**Supervisor** — Central agent delegates to workers, synthesizes results. Like a project manager.\n\n**Pipeline** — Sequential execution. Each agent's output → next agent's input. Assembly line.\n\n**Debate** — Two agents argue positions, third judges. Reduces errors on subjective tasks.\n\n**Swarm** — Agents hand off dynamically based on current need.\n\n**Hierarchical** — Layers: top plans, mid coordinates, bottom executes." },
+
+            { type: "text", heading: "How Handoffs Actually Work", body: "Agents don't share a mind — each is a separate LLM loop with its own context (m5l1). A \"handoff\" is therefore just **moving state from one agent's context into another's.** Two mechanisms dominate:\n\n**Shared scratchpad** — All agents read and write a single message list. The supervisor and workers all see the full running conversation. Simple, but the context grows fast and every agent is exposed to everyone else's noise.\n\n**Message passing (curated handoff)** — Each agent receives a *purpose-built* payload — \"here is your subtask and exactly the context you need\" — does its work, and returns a *result*, not its whole transcript. More plumbing, but far cheaper and more reliable.\n\nThe key skill is **context engineering at the boundary**: you decide what each agent sees. Passing full history everywhere is the lazy default that blows up token cost and dilutes attention. Passing a tight, relevant payload keeps each agent sharp. Handoff design *is* multi-agent design." },
+
+            { type: "text", heading: "Context Isolation: The Real Reason Multi-Agent Helps", body: "The textbook reason for multi-agent is \"specialization.\" The deeper, more practical reason is **context isolation.**\n\nA single agent tackling a big task pollutes its own context window with everything it touches — raw search results, abandoned approaches, tool errors, half-finished reasoning. By step 12, that clutter actively degrades its decisions (lost-in-the-middle, m3l1; runaway scratchpad, m5l6).\n\nSplit the work across sub-agents and each subtask gets a **fresh, clean context window.** A worker researches one question with its full attention, then returns only a *distilled result* to the orchestrator. The orchestrator never sees the worker's messy intermediate steps — just the conclusion. The system as a whole reasons over far more material than any single context window could hold, without any one agent drowning in it.\n\nThis is why orchestrator-worker systems handle large research and analysis tasks that choke a single agent — and it's the lens for deciding *where* to split: cut the task where the intermediate work is voluminous but the result is compact." },
+
             { type: "code", heading: "Supervisor Pattern — LangGraph", lang: "python", code: `from langgraph.graph import StateGraph, MessagesState, START, END
 from langchain_openai import AzureChatOpenAI
 
@@ -704,6 +719,20 @@ for agent in ["researcher", "writer", "reviewer"]:
     graph.add_edge(agent, "supervisor")
 
 app = graph.compile()` },
+
+            { type: "text", heading: "Orchestrator-Worker in Practice", body: "The **orchestrator-worker** pattern (a.k.a. lead-agent / sub-agent) is the workhorse of production multi-agent systems — it's how Anthropic's own research system is built.\n\nThe flow:\n\n**1. Decompose** — A lead/orchestrator agent breaks the task into independent subtasks.\n**2. Delegate** — It spawns worker agents, each with a focused subtask and a clean context — often **in parallel** for speed.\n**3. Collect** — Workers return distilled results (not their full transcripts).\n**4. Synthesize** — The orchestrator combines results into the final answer, spawning more workers if gaps remain.\n\nWhy it scales where a single agent stalls: workers run concurrently (latency), each works in a clean context (quality), and the orchestrator's context stays small because it only sees summaries (cost + focus). The cost to watch: parallel workers can fan out into many simultaneous LLM calls — cap the fan-out and the per-worker turns." },
+
+            { type: "decision", heading: "Which Topology?", rows: [
+              ["One coherent task, no parallelism or verification need", "Single agent — don't go multi-agent (m5l1)"],
+              ["Fixed sequence of distinct stages (extract→draft→review)", "Pipeline — each agent's output feeds the next"],
+              ["Big task that decomposes into independent subtasks", "Orchestrator-worker — decompose, parallelize, synthesize"],
+              ["Central coordination with specialist roles", "Supervisor — delegates and synthesizes, like a manager"],
+              ["Subjective / error-prone task needing a second opinion", "Debate or generator-critic — independent verification"],
+              ["Many roles with plan/coordinate/execute layers", "Hierarchical — layered orchestration (large workflows, m5l7)"],
+            ]},
+
+            { type: "text", heading: "Failure Modes Unique to Multi-Agent", body: "Adding agents adds failure types a single agent doesn't have:\n\n**Error compounding** — A small mistake by an early agent becomes the trusted input of the next, amplifying down the chain. *Antidote:* validate handoffs; have downstream agents sanity-check inputs, not blindly trust them.\n\n**Lost in translation** — The handoff payload omits context the next agent needed, so it works on an incomplete picture. *Antidote:* design handoff schemas deliberately (above); test them.\n\n**Coordination overhead** — More agents talking means more tokens and latency spent on orchestration than on work. *Antidote:* fewer agents, tighter payloads.\n\n**Circular handoffs / deadlock** — Agent A defers to B, B defers back to A. *Antidote:* global turn/step caps and circuit breakers.\n\n**Conflicting outputs** — Two agents produce contradictory results with no arbiter. *Antidote:* a designated synthesizer/judge owns the final answer.\n\n**Undebuggable failures** — \"The system gave a bad answer\" — but which agent? *Antidote:* trace every agent's input/output with a shared correlation ID (m5l1 observability).\n\nThe theme: multi-agent failures live *between* agents — instrument and design the seams, not just the agents." },
+
             { type: "checklist", heading: "Multi-Agent Cost & Latency", items: [
               "Model your costs: 5 agents × 3 iterations = 15 LLM calls per request",
               "Sequential chains add up: 5 steps × 2s each = 10s minimum",
@@ -711,12 +740,32 @@ app = graph.compile()` },
               "Log every agent's reasoning, tool calls, and outputs from day one",
               "Set max iteration limits per agent AND per workflow",
               "Implement circuit breakers — agents can get stuck in loops",
+            ]},
+
+            { type: "checklist", heading: "Multi-Agent Design Takeaways", items: [
+              "Default to a single agent; add agents only for real specialization, parallelism, or independent verification",
+              "A handoff is just moving state between separate contexts — design the payload, don't dump full history",
+              "Context isolation (a clean window per subtask) is often the biggest real win, not specialization alone",
+              "Orchestrator-worker — decompose, parallelize, synthesize — is the dominant production pattern",
+              "Most multi-agent failures live BETWEEN agents: error compounding, lost handoffs, conflicts — instrument the seams",
+              "Cap fan-out, per-agent turns, AND total workflow steps; add circuit breakers for loops",
+              "Designate one agent to own the final synthesis so conflicting outputs get resolved",
+              "Trace every agent with a shared correlation ID — otherwise multi-agent bugs are undebuggable",
             ]}
           ]
         },
-        { id: "m5l4", title: "Agent Guardrails & Safety", duration: "9 min", tags: ["agents","safety","guardrails","production"],
+        { id: "m5l4", title: "Agent Guardrails & Safety", duration: "18 min", tags: ["agents","safety","guardrails","production","least-privilege","human-in-the-loop"],
           content: [
             { type: "text", heading: "The Reliability Problem", body: "Agents are less reliable than single LLM calls. Each step introduces failure potential. A 95% reliable step over 10 steps = 60% end-to-end reliability.\n\nProduction agents need engineering rigor." },
+
+            { type: "text", heading: "Why Reliability Compounds (the Math)", body: "The compounding is the central fact of agent engineering, so sit with the numbers. End-to-end reliability is roughly per-step reliability raised to the number of steps:\n\n**95% per step** → 0.95¹⁰ ≈ **60%** over 10 steps\n**99% per step** → 0.99¹⁰ ≈ **90%**\n**99.9% per step** → 0.999¹⁰ ≈ **99%**\n\nTwo lessons fall out. First, **fewer steps is safer** — every tool call and hop you remove raises end-to-end reliability multiplicatively (another argument for the simplest architecture, m5l1). Second, since you can't make an LLM step perfectly reliable, guardrails aren't only about *blocking* bad actions — they're about **recovering** from them: validate each step, retry on failure, and catch errors before they compound into the next step. Think of guardrails as the error-correction layer that turns an unreliable chain into a reliable system." },
+
+            { type: "text", heading: "The Three Layers of Guardrails", body: "Guardrails sit at three points around the agent loop, and you need all three — each catches what the others can't:\n\n**1. Input guardrails (before the agent acts)** — Validate and sanitize what comes in: reject malformed requests, screen for prompt injection (m3l3), enforce auth, classify intent. Stops bad input from ever reaching the reasoning loop.\n\n**2. Action / tool guardrails (what the agent CAN do)** — The most important layer. Constrain the agent's *capabilities*: least-privilege tool scopes, allow-lists of permitted actions, sandboxed code execution, spend/iteration caps, confirmation gates on consequential tools. This bounds the *worst case* regardless of what the model decides.\n\n**3. Output guardrails (before results escape)** — Validate and filter what comes out: schema-check structured output, redact PII, scan for leaked secrets or policy violations, sanitize anything rendered (m3l3), gate risky actions for human approval.\n\nMental model: input guards *what enters*, action guards *what's possible*, output guards *what leaves.* An injection that slips past input is still contained by action limits, and still caught by output checks — defense in depth (m3l3)." },
+
+            { type: "text", heading: "Deterministic Guardrails vs LLM Guardrails", body: "Guardrails are enforced two ways, and choosing the right one per rule is the whole game.\n\n**Deterministic (code)** — Regexes, JSON-schema validation, allow-lists, permission checks, hard spend/iteration caps. Fast, free, fully reliable, and *cannot be talked out of it* — a prompt injection can't argue with `if amount > limit: block`. Use these for every constraint that actually matters: security, money, irreversible actions, data access.\n\n**LLM-based (a guard model)** — A classifier or judge model evaluating fuzzy properties: toxicity, off-topic, jailbreak attempts, relevance, faithfulness. Flexible enough to catch things you can't write a rule for — but probabilistic and *itself* attackable, so it can be fooled.\n\nThe rule: **deterministic for hard limits, LLM for soft judgment** — and *never* rely on the agent policing itself in its own prompt (\"please don't delete anything\"). A constraint that exists only as an instruction is a suggestion; a constraint enforced in code is a guarantee." },
+
+            { type: "text", heading: "Least Privilege Is Your Strongest Guardrail", body: "Every other guardrail is probabilistic; least privilege is structural. **The agent cannot do what it cannot reach.**\n\nConcretely:\n\n**Scope the tools** — Give an agent only the tools its job needs (m5l2). A support agent that looks up orders and drafts replies simply has no \"delete customer\" or \"issue refund\" tool to misuse.\n**Scope the credentials** — The agent's database user should be read-only and limited to the current tenant; its API keys should carry minimum scopes. Then even a hijacked agent is boxed in by the permission system, not by its own good behavior.\n**Sandbox code & file access** — Run generated code in an isolated sandbox with time/memory limits and no network; restrict file tools to a specific directory (m5l2).\n**Read-only by default** — Start every capability read-only and grant write/destructive access deliberately, action by action.\n\nThis is the direct answer to prompt injection (m3l3): you can't guarantee the model won't be tricked into *trying* something harmful, but you can guarantee it lacks the access to *succeed.* Design so the worst an injected agent can do is harmless." },
+
             { type: "code", heading: "Guardrail Wrapper Pattern — C#", lang: "csharp", code: `public class GuardedAgent
 {
     private readonly Kernel _kernel;
@@ -784,18 +833,30 @@ app = graph.compile()` },
               "PII detection on outputs before returning to users",
               "Circuit breaker: if error rate exceeds threshold, fall back to simpler path",
             ]},
+
+            { type: "text", heading: "Human-in-the-Loop: Approve, Edit, or Veto", body: "Human-in-the-loop (HITL) keeps agents safe on consequential actions without abandoning automation. Three escalating modes:\n\n**Approve / reject** — The agent pauses before a gated action, presents what it intends to do (\"send this email to X\"), and waits for a yes/no. The default for risky actions.\n\n**Edit-before-execute** — The human can modify the agent's proposed action (tweak the email, adjust the amount) before it commits. More control, good when the agent is usually-right-but-imperfect.\n\n**Post-hoc review** — The agent acts autonomously, but every action is logged for later audit. For low-risk, high-volume actions where pausing each is impractical.\n\nMechanically this is the **propose-then-commit** pattern (m5l2): split a consequential action into a tool that *previews* it and a separate tool that *executes* it, with the human gate between. The tradeoff is latency and human effort — so gate by risk (next table), not everything, or you build an 'automation' that needs a babysitter for every step." },
+
             { type: "decision", heading: "Human-in-the-Loop Patterns", rows: [
               ["Read-only operations (search, lookup)", "No approval needed"],
               ["Internal data modification", "Log + notify, optional approval"],
               ["External communication (email, Slack)", "Always require approval"],
               ["Financial transactions", "Always require approval + audit"],
               ["Irreversible actions (delete)", "Require approval + confirmation"],
-            ]}
+            ]},
+
+            { type: "text", heading: "Autonomy Levels", body: "Don't think of an agent as autonomous-or-not; think in **levels**, and match the level to the action's risk:\n\n**L0 — Suggest only.** Agent proposes, human does everything. (A copilot.)\n**L1 — Approve each action.** Agent acts, but every action needs a human yes.\n**L2 — Approve consequential only.** Routine reads/writes run free; send/pay/delete need approval.\n**L3 — Act, then report.** Agent acts autonomously and notifies; humans review after the fact.\n**L4 — Fully autonomous.** No human in the loop.\n\nThe selection rule: **autonomy should scale inversely with reversibility × blast-radius.** A reversible, low-impact action (re-tagging a ticket) can run at L3/L4; an irreversible, high-impact one (wiring money, deleting records) stays at L1 no matter how good the agent looks in tests. And earn autonomy empirically — start low, watch the eval and audit data (m5l5), and raise the level only when the evidence supports it." },
+
+            { type: "text", heading: "Failure Modes & Safety Antidotes", body: "**Runaway loop** — Agent iterates forever, burning money. *Antidote:* hard max-iterations, spend cap, wall-clock timeout, repeated-state detection (m5l1).\n\n**Injected tool call** — Indirect prompt injection (m3l3) drives the agent to call a destructive tool. *Antidote:* least privilege so the tool isn't there; confirmation gate if it must be.\n\n**Silent error cascade** — A tool fails, the agent doesn't notice, and the bad result propagates. *Antidote:* structured error envelopes (m5l2) and per-step output validation.\n\n**Over-broad permissions** — The agent's credentials can touch far more than its task needs. *Antidote:* scope credentials to the task and tenant.\n\n**Missing audit trail** — A wrong action happened and no one can reconstruct why. *Antidote:* log every decision, tool call, and result with a correlation ID — for debugging *and* compliance.\n\n**Guardrail-only-in-the-prompt** — \"You must never X\" as the sole control. *Antidote:* enforce X in deterministic code; the prompt is a hint, not a fence.\n\nThe through-line: assume the model *will* eventually do the wrong thing, and engineer the system so that when it does, nothing bad can actually happen." }
           ]
         },
-        { id: "m5l5", title: "Agent Evaluation & Testing", duration: "8 min", tags: ["agents","testing","evaluation"],
+        { id: "m5l5", title: "Agent Evaluation & Testing", duration: "18 min", tags: ["agents","testing","evaluation","trajectory","llm-as-judge"],
           content: [
-            { type: "text", heading: "Three Levels of Agent Testing", body: "**Unit tests** — Each tool works correctly in isolation. Standard software testing.\n\n**Trajectory tests** — Given a task, does the agent use the right tools in a reasonable order? Evaluate the path, not just the endpoint.\n\n**End-to-end tests** — Does the agent complete the task correctly? Test with diverse inputs including edge cases, adversarial inputs, and missing data." },
+            { type: "text", heading: "Three Levels of Agent Testing", body: "Agent evaluation specializes the discipline from m3l4 — eval sets, LLM-as-judge, regression gating — to systems that don't just *produce an output* but *take a path*. So you test at three levels:\n\n**Unit tests** — Each tool works correctly in isolation. Standard software testing.\n\n**Trajectory tests** — Given a task, does the agent use the right tools in a reasonable order? Evaluate the path, not just the endpoint.\n\n**End-to-end tests** — Does the agent complete the task correctly? Test with diverse inputs including edge cases, adversarial inputs, and missing data." },
+
+            { type: "text", heading: "Why Agents Are Hard to Evaluate", body: "Evaluating an agent is harder than evaluating a single LLM call, for three compounding reasons:\n\n**Stochastic** — Same input, different output run to run (m3l2). A test that passes once may fail next time, so single-run assertions are flaky.\n\n**Multi-step** — Success isn't one output to check; it's a *trajectory* of decisions, tool calls, and results, any of which can go wrong while the final answer still looks plausible.\n\n**Path-dependent with many valid solutions** — There's often no single \"correct\" path. Two agents can both succeed via different tool sequences; one wrong turn early can still be recovered later. Exact-match grading breaks immediately.\n\nSo agent evaluation borrows the discipline from m4l6 (golden sets, LLM-as-judge, offline+online) but adds two agent-specific ideas: evaluate the **trajectory** as well as the **outcome**, and grade on **properties and pass-rates**, not exact strings." },
+
+            { type: "text", heading: "Outcome vs Process (Trajectory) Evaluation", body: "Two questions, both required:\n\n**Outcome evaluation** — Did the agent reach the right *end state*? The final answer is correct; the database ends in the intended state; the ticket is actually closed. This is *what* it achieved.\n\n**Process (trajectory) evaluation** — Did it get there *sensibly*? Right tools, reasonable order, no wasted loops, no dangerous detours. This is *how* it achieved it.\n\nWhy you can't skip either: an agent that returns the right answer but *deleted and recreated* the record to get there passes outcome and fails process — a latent disaster. An agent that follows a flawless plan but times out before finishing passes process and fails outcome. Production reliability needs both green.\n\nHow to score each: outcome with an assertion or LLM-judge on the final state; trajectory by inspecting the tool-call log — did it call the expected tools, in an acceptable order, within the step budget, and never touch a forbidden tool? The trajectory test below does exactly this." },
+
             { type: "code", heading: "Agent Trajectory Testing — Python", lang: "python", code: `import pytest
 
 async def test_refund_agent_trajectory():
@@ -838,6 +899,38 @@ async def test_agent_max_iterations():
     })
     tool_calls = [m for m in result["messages"] if hasattr(m, "tool_calls")]
     assert len(tool_calls) <= 10, "Should respect iteration limit"` },
+
+            { type: "text", heading: "LLM-as-Judge for Open-Ended Agent Output", body: "Many agent outcomes have no single correct string — a drafted email, a research summary, a remediation plan. As in RAG eval (m4l6), grade these with **LLM-as-judge**: a strong, *separate* model scores the output against a rubric.\n\nAgent-specific rubric dimensions worth judging:\n\n**Task completion** — Did it actually accomplish the goal, fully?\n**Tool-use appropriateness** — Were the chosen tools and arguments sensible?\n**Efficiency** — Did it reach the goal without wasteful steps?\n**Safety adherence** — Did it respect guardrails (no forbidden actions, asked for approval when required — m5l4)?\n\nUse **reference-based** judging when you have an ideal answer to compare against, **reference-free** rubric judging when you don't. All the m4l6 caveats apply: validate the judge against human ratings, use a different model than the agent, watch length/position bias. The judge is a measurement tool — calibrate it before you trust its numbers." },
+
+            { type: "text", heading: "Build an Agent Eval Set (Scenarios, Not Just Q&A)", body: "A RAG eval case is a (question, answer) pair (m4l6). An *agent* eval case is a **scenario**: a starting state, a goal, the tools available, the expected trajectory, and a success check.\n\nA good scenario specifies:\n\n**Initial state** — What's in the (mocked) world: this customer, these orders, this inventory.\n**Goal / input** — The user request that kicks off the run.\n**Expected trajectory** — Which tools should (and shouldn't) be called, roughly in what order.\n**Success criteria** — The end-state assertion and/or judge rubric.\n\nCrucially, scenarios run against a **mocked environment** — tools return fixed, scripted responses — so the test is deterministic and never touches real systems. Cover the same case classes you'd test in software, plus AI-specific ones: happy path, missing data, ambiguous request, adversarial/injection input (m3l3), and the *impossible task* (the agent should give up gracefully, not loop). This scenario suite is your regression gate." },
+
+            { type: "code", heading: "Scenario Eval with Mocked Tools — Python", lang: "python", code: `# Make a stochastic, multi-step agent testable: mock the tools (determinism),
+# then assert on BOTH the trajectory and the outcome.
+
+SCENARIO = {
+    "input": "Refund jane@example.com's last order",
+    "mocks": {
+        "get_customer": {"id": 42, "email": "jane@example.com"},
+        "get_orders":   [{"id": 991, "total": 80, "status": "delivered"}],
+        "issue_refund": {"status": "pending_approval", "order_id": 991},
+    },
+    "must_call":     ["get_customer", "get_orders", "issue_refund"],
+    "must_not_call": ["delete_customer"],
+    "max_steps": 8,
+}
+
+def run_scenario(agent, sc, runs=10, pass_threshold=0.9):
+    passes = 0
+    for _ in range(runs):                           # run K times -- it's stochastic
+        trace = agent.run(sc["input"], tools=mock_tools(sc["mocks"]))
+        calls = [s.tool for s in trace.steps]
+        ok = (all(t in calls for t in sc["must_call"])            # trajectory
+              and not any(t in calls for t in sc["must_not_call"])
+              and len(trace.steps) <= sc["max_steps"]
+              and "pending_approval" in trace.final_answer)       # outcome
+        passes += ok
+    return passes / runs >= pass_threshold          # require 9/10, not 1/1` },
+
             { type: "checklist", heading: "Agent Testing Checklist", items: [
               "Happy path: does the agent complete typical tasks correctly?",
               "Edge cases: ambiguous inputs, missing data, partial information",
@@ -847,10 +940,27 @@ async def test_agent_max_iterations():
               "Trajectory: is the tool sequence efficient and logical?",
               "Regression: full test suite runs on every prompt/tool/model change",
               "Load testing: agent behavior under concurrent requests",
+            ]},
+
+            { type: "text", heading: "Taming Non-Determinism in Tests", body: "Stochastic agents make naive tests flaky. Four techniques make them stable enough for CI:\n\n**Assert on properties, not exact strings.** Don't check `answer == \"...\"`; check invariants: did it call `get_customer`? did it stay under the step budget? did it *never* call `delete_*`? did the final state match? Properties survive paraphrasing and alternate-but-valid paths.\n\n**Require a pass-rate, not a single pass.** Run each scenario K times (say 10) and require, e.g., 9/10 successes. A test that passes 1/1 today and 0/1 tomorrow tells you nothing; a pass-rate is a real reliability metric.\n\n**Mock the environment.** Scripted tool responses remove a huge source of variance and let tests run offline, fast, and without side effects.\n\n**Pin and control sampling.** Temperature 0 and a pinned model version reduce drift (though, m3l2, temp 0 isn't perfectly deterministic).\n\nThe mindset shift from deterministic software testing: you're measuring a *reliability rate*, not asserting a fixed truth." },
+
+            { type: "text", heading: "Offline Evals + Online Monitoring", body: "Like RAG (m4l6), agents need two loops:\n\n**Offline** — Your scenario suite runs as a **regression gate** in CI (m7l4) on every prompt, tool, or model change. It catches regressions before users do — essential, because a one-line prompt tweak can silently break a trajectory three steps deep.\n\n**Online** — Real production reveals what scenarios missed. Watch agent-specific signals: **task-completion rate**, **HITL reject/edit rate** (how often humans override the agent — m5l4), **escalation rate**, steps/cost/latency per task, and user thumbs. A rising HITL-reject rate is an early warning that quality is slipping.\n\nClose the loop: every production failure becomes a new scenario in the offline suite, so the same bug can never ship twice. (Production monitoring: m7l2.)" },
+
+            { type: "text", heading: "Agent Eval Pitfalls", body: "**Checking only the final answer.** Misses reckless or unsafe paths that happen to reach a plausible result. Evaluate the trajectory too.\n\n**Tiny or flaky suites.** Five scenarios run once each is theater. Use enough scenarios, run each K times, gate on pass-rate.\n\n**Judge = the agent's own model.** Shared blind spots inflate scores (m4l6). Use a separate, strong judge and validate it.\n\n**No mocked environment.** Tests that hit live systems are slow, non-repeatable, and have side effects. Mock the tools.\n\n**Never re-running on upgrades.** A model or SDK bump can change agent behavior across the board — re-run the full suite, don't assume.\n\n**Playground-only evaluation.** \"It worked when I tried it\" is not coverage. The whole point of a suite is the cases you *didn't* think to try by hand." },
+
+            { type: "checklist", heading: "Agent Evaluation Takeaways", items: [
+              "Agents are stochastic, multi-step, and path-dependent — evaluate trajectories and outcomes, not exact strings",
+              "Outcome eval (right end state) AND process eval (sensible, safe path) must both pass",
+              "Express eval cases as scenarios: initial state, goal, expected tool calls, success check — run against mocked tools",
+              "Grade open-ended outputs with a separate LLM judge on completion / tool-use / efficiency / safety (m4l6 caveats apply)",
+              "Tame non-determinism: assert on properties, require a pass-rate (e.g., 9/10), mock the environment, pin the model",
+              "Run the scenario suite as a CI regression gate (m7l4) — a prompt tweak can break a trajectory steps deep",
+              "Watch online signals — task-completion and HITL-reject rates — and feed every production failure back as a scenario",
+              "Always test adversarial input (m3l3), missing data, and the impossible task (graceful give-up, no infinite loop)",
             ]}
           ]
         },
-        { id: "m5l6", title: "Agent State & Memory Patterns", duration: "13 min", tags: ["agents","memory","state","patterns"],
+        { id: "m5l6", title: "Agent State & Memory Patterns", duration: "15 min", tags: ["agents","memory","state","patterns","context-window"],
           content: [
             { type: "text", heading: "Why Agents Need Memory", body: "LLMs are stateless — each API call starts from scratch. But useful agents need to remember: what happened earlier in the conversation, what the user prefers, what entities have been mentioned, and what tasks are in progress.\n\nMemory is what turns a stateless tool-caller into a coherent agent. The right memory architecture depends on your use case." },
             { type: "decision", heading: "Memory Type Selection", rows: [
@@ -1207,6 +1317,8 @@ app = graph.compile()
 result = await app.ainvoke({"document_path": "/invoices/001.pdf"})
 print(result["status"])      # "processed" or "exception"
 print(result["messages"])    # full audit trail` },
+            { type: "text", heading: "Memory Failure Modes", body: "Every memory pattern trades one problem for another — know what breaks:\n\n**Unbounded growth** — Buffer memory eventually blows the context window and the budget (m2l4, m5l1). *Antidote:* a hard token budget with window or summary memory beyond it.\n\n**Contradiction & staleness** — Window memory forgets the user's earlier constraint and the agent contradicts itself; long-term memory holds a fact that's since changed. *Antidote:* keep the user's goal pinned, and give long-term memories a retention/decay policy.\n\n**Lossy summarization** — The summarize step drops the one detail that mattered later. *Antidote:* never summarize the original goal or open commitments; summarize only settled middle turns.\n\n**Irrelevant retrieval** — Long-term vector memory injects loosely-related past interactions that distract the model (same precision problem as RAG, m4l3). *Antidote:* retrieve few, high-threshold memories; rerank.\n\n**Cross-user / cross-tenant leakage** — The highest-severity memory bug: one user's memories surface in another's session. *Antidote:* partition every memory store by user/tenant ID and pre-filter on it (m3l3, m4l3) — this is a breach, not a glitch.\n\n**Lost on crash** — In-memory state vanishes when the process restarts mid-task. *Antidote:* persist state to a database (the workflow-state pattern above)." },
+
             { type: "checklist", heading: "Memory Architecture Checklist", items: [
               "Start with the simplest memory type that meets your needs (usually buffer)",
               "Set a token budget for memory context — don't let it eat your context window",
@@ -1221,9 +1333,12 @@ print(result["messages"])    # full audit trail` },
             ]}
           ]
         },
-        { id: "m5l7", title: "Workflow Orchestration Deep Dive", duration: "14 min", tags: ["agents","orchestration","langgraph","semantic-kernel","workflows"],
+        { id: "m5l7", title: "Workflow Orchestration Deep Dive", duration: "20 min", tags: ["agents","orchestration","langgraph","semantic-kernel","workflows","durability","state-machine"],
           content: [
             { type: "text", heading: "Beyond Simple Agents", body: "Simple ReAct agents handle straightforward tool-calling tasks well. But real enterprise workflows need more: conditional branching, parallel execution, human approval gates, error recovery, and persistent state that survives crashes.\n\nThis is where orchestration frameworks come in. They give you a graph-based or pipeline-based way to define complex workflows where an LLM is just one node among many." },
+
+            { type: "text", heading: "Orchestration vs Agency: Who Owns Control Flow?", body: "The key shift from Module 5's earlier lessons: **who decides what happens next?**\n\nIn a pure agent (m5l1), the *model* owns control flow — it decides each step, including when to stop. Maximum flexibility, minimum predictability. In an **orchestrated workflow**, *you* own control flow — the steps, branches, and order are defined in code as a graph — and the LLM is just one node that supplies intelligence where you ask for it.\n\nThis inversion is the whole point. Code-defined flow is **deterministic, testable, auditable, and resumable** in ways an agent's free-running loop never is. You give up some adaptability and gain the reliability enterprise workflows demand.\n\nThe production stance: **make the workflow as deterministic as the problem allows, and reserve model-driven agency for the nodes that genuinely need open-ended decisions.** Most \"agent\" projects that struggle in production are really workflows that handed too much control to the model." },
+
             { type: "decision", heading: "Orchestration Framework Selection", rows: [
               [".NET/C# team, Azure ecosystem", "Semantic Kernel — first-party Microsoft, native Azure integration, production-grade"],
               ["Python team, maximum flexibility", "LangGraph — graph-based, most expressive, best for complex branching"],
@@ -1232,6 +1347,9 @@ print(result["messages"])    # full audit trail` },
               ["Simple linear pipeline", "Plain code — don't add a framework for a 3-step chain"],
               ["Event-driven / async-heavy", "LangGraph with async nodes + message queues for durability"],
             ]},
+
+            { type: "text", heading: "Workflows as State Machines", body: "Under the hood, an orchestration framework turns your workflow into a **state machine** — the same well-understood construct from classic software:\n\n**State** — A single typed object (a TypedDict or Pydantic model) holding everything the workflow knows so far: inputs, intermediate results, flags, an audit trail. Not a free-form conversation — a defined schema.\n**Nodes** — Functions that read the state, do work (call an LLM, hit a DB, validate), and return an updated state. Each node is one unit of progress.\n**Edges** — Transitions between nodes. *Static* edges always go A→B; *conditional* edges branch on the state (`if not state.is_valid → exception_queue`).\n\nThinking in state machines buys three things the agent loop lacks: the state is **inspectable** at every step (print exactly what the workflow knew when it branched), **serializable** (which enables checkpointing — below), and **typed** (so a malformed transition is a code error, not a silent LLM mistake). Define the schema first; the nodes and edges follow." },
+
             { type: "text", heading: "Semantic Kernel Planners & Pipelines", body: "Semantic Kernel offers two orchestration approaches:\n\n**Auto Function Calling** — The LLM decides which plugins/functions to call and in what order. Best for conversational agents where the user drives the workflow.\n\n**Manual Orchestration** — You define the pipeline in code, calling kernel functions explicitly. Best for structured workflows where the steps are known in advance.\n\nFor production systems, manual orchestration is almost always the right choice. You want deterministic flow with LLM intelligence at specific steps — not an LLM deciding the entire workflow." },
             { type: "code", heading: "Semantic Kernel Pipeline — C#", lang: "csharp", code: `using Microsoft.SemanticKernel;
 
@@ -1457,6 +1575,20 @@ result = await app.ainvoke(
     {"review_decision": "approve"},
     config=config  # same thread_id resumes from checkpoint
 )` },
+
+            { type: "text", heading: "How Checkpointing & Durability Work", body: "Real workflows run for minutes to days (a human approval might land tomorrow) and *will* be interrupted by crashes, deploys, and timeouts. **Checkpointing** is what makes them survivable.\n\nThe mechanism: after each node completes, the framework **serializes the entire state object to a durable store** (Postgres, Redis, etc.), keyed by a **thread/run ID**. To resume — after a crash or a delayed approval — it loads the last checkpoint for that ID and continues from the *next* node, not from the beginning. (In the code above, that's the `checkpointer` plus `thread_id`.) A human-in-the-loop *interrupt* works the same way: the workflow checkpoints, stops, and an external system resumes it later with the human's decision.\n\nTwo design consequences. First, **state must be serializable** — no live connections or unpicklable objects stashed in it. Second, resumption is usually **at-least-once**: a node can re-run if the process died after doing its work but before the checkpoint saved — which leads straight to idempotency (next)." },
+
+            { type: "text", heading: "Error Recovery & Compensation (Sagas)", body: "Because nodes touch real systems and can re-run, durable workflows need error handling beyond a try/catch:\n\n**Idempotency** — A node may execute twice (at-least-once, above). Make side effects safe to repeat: an idempotency key on payments and external calls, `INSERT ... ON CONFLICT` for writes, and a *decide* (pure, re-runnable) / *commit* (guarded) split. A non-idempotent \"charge the card\" node can double-bill on a retry.\n\n**Retries with backoff** — Transient failures (a flaky API, a rate limit) should retry automatically with exponential backoff at the node level, not fail the whole workflow.\n\n**Compensation (the saga pattern)** — When a multi-step process partially completes and a later step fails, you often can't just stop — you must *undo* the earlier steps. A saga pairs each forward action with a **compensating action** (created an order → cancel it; reserved inventory → release it) and runs the compensations in reverse on failure.\n\n**Dead-letter queue** — Workflows that exhaust retries land in a DLQ for human inspection rather than vanishing.\n\nThe theme: in a workflow that moves money or data, \"it crashed halfway\" is a *normal* event you design for, not an exception you hope to avoid." },
+
+            { type: "decision", heading: "Deterministic Workflow vs Agent: Which?", rows: [
+              ["Steps and branches are known in advance", "Deterministic workflow — code owns the flow, LLMs at nodes"],
+              ["Must be auditable / regulated / reproducible", "Workflow — free-running agents resist audit"],
+              ["Long-running; must survive crashes & resume", "Workflow with checkpointing — agents have no native durability"],
+              ["Touches money/data with multi-step side effects", "Workflow with sagas + idempotency"],
+              ["Task is open-ended; the path can't be predicted", "Agent (m5l1) — let the model decide, within guardrails (m5l4)"],
+              ["Mix: known skeleton, open-ended sub-steps", "Workflow skeleton with an agent inside a node — the common production shape"],
+            ]},
+
             { type: "text", heading: "Key Design Patterns", body: "**Deterministic flow, intelligent nodes** — The workflow structure (which steps, in what order, what branches) is defined in code. LLMs are used only at specific nodes where intelligence is needed (classification, extraction, GL coding). Never let an LLM decide the workflow structure.\n\n**Checkpointing for durability** — Long-running workflows crash. LangGraph's checkpointer saves state after each node. When you restart, it resumes from the last checkpoint — not from scratch.\n\n**Human-in-the-loop via interrupts** — Define interrupt points where the workflow pauses and waits for human input. The workflow state is saved to a database. An external system (web UI, Slack bot, email) collects the human decision and resumes the workflow.\n\n**Parallel execution** — Independent steps can run simultaneously. In LangGraph, nodes that don't depend on each other run in parallel automatically when you define separate branches that converge." },
             { type: "checklist", heading: "Workflow Orchestration Checklist", items: [
               "Define workflow structure in code, not in LLM prompts — deterministic flow is debuggable",

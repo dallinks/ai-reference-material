@@ -162,6 +162,15 @@ def self_attention(X, Wq, Wk, Wv):
 
             { type: "text", heading: "How a Token Flows Through the Whole Stack", body: "Putting it together, the full path from input to next token:\n\n1. **Tokenize** the text into token IDs (m2l1).\n2. **Embed** each ID into a vector and **add positional information.**\n3. Pass through **N stacked Transformer blocks** (frontier models have dozens to 100+). Each block: multi-head attention → add & normalize → feed-forward → add & normalize. The *residual* (\"add\") connections let signal and gradients flow through a very deep stack without degrading.\n4. The final layer projects each position's vector into a **logit for every token in the vocabulary** (100K+ numbers).\n5. **Softmax** turns the last position's logits into a probability distribution over the next token.\n6. **Sample** one token, append it, and repeat from step 1.\n\nEverything an LLM does — reasoning, coding, conversation — is this loop, run one token at a time." },
 
+            { type: "diagram", heading: "One Token's Journey Through the Stack", variant: "cycle", nodes: [
+              { label: "Tokenize", detail: "text → IDs" },
+              { label: "Embed", detail: "+ position" },
+              { label: "N× blocks", detail: "attention → FFN" },
+              { label: "Logits", detail: "score every token" },
+              { label: "Softmax", detail: "→ probabilities" },
+              { label: "Sample", detail: "pick next token" },
+            ], caption: "Autoregressive generation: the sampled token is appended to the input and the whole loop runs again for the next one." },
+
             { type: "decision", heading: "Encoder-only vs Decoder-only vs Encoder-Decoder", rows: [
               ["Classification, embeddings, search, understanding", "Encoder-only (BERT-style) — sees the whole input at once"],
               ["Text generation, chat, completion, code", "Decoder-only (GPT, Claude, Llama) — generates left-to-right"],
@@ -447,6 +456,85 @@ async def route_query(query: str, context: str = "") -> str:
               "Pin specific model versions for reproducibility",
               "Re-evaluate quarterly: model capabilities and pricing change fast",
               "Factor in prompt caching: a more expensive model with better caching can be cheaper overall",
+            ]}
+          ]
+        },
+        { id: "m2l6", title: "Model Customization in Practice", duration: "19 min", tags: ["llm","fine-tuning","rag","distillation","synthetic-data","slm","selection"],
+          content: [
+            { type: "text", heading: "From Mechanics to the Decision", body: "m2l3 explained *how* customization works — SFT, LoRA, RLHF/DPO. This lesson is the part that actually shows up in your job: **given a real problem, do you prompt it, retrieve for it, or fine-tune — and how do you make a small, cheap model do a big model's work?**\n\nThe single most expensive mistake in applied AI is reaching for fine-tuning first. It's the most powerful-sounding option, so teams jump to it — then spend weeks collecting data and running GPUs to get something a prompt or a retrieval step would have delivered in an afternoon, cheaper, and more flexibly. The skill is knowing which tool the problem actually needs." },
+
+            { type: "text", heading: "The Customization Ladder — Climb in Order", body: "Reach for the cheapest, most reversible option first, and only climb when your eval (m3l4) proves you have to:\n\n**1. Prompt + few-shot examples (m3)** — Minutes to change, no training, instant to roll back. Astonishingly far on its own.\n**2. Retrieval / RAG (m4)** — When the gap is *missing, private, or changing facts.* Add knowledge without touching the model.\n**3. Fine-tune (m2l3)** — When the gap is *behavior or form* that prompting can't hold reliably.\n**4. Distill to a smaller model** — Once it works, make it cheap and fast for production scale.\n\nEach rung costs more and is harder to undo: a prompt edit is seconds; a fine-tune is a data-collection project plus GPU time plus a new artifact to version and maintain. Most teams skip straight to rung 3 and regret it. Climb only as high as the problem forces you to." },
+
+            { type: "text", heading: "Fine-Tune for Behavior, Retrieve for Facts", body: "This one heuristic resolves most customization confusion, so internalize it:\n\n**Fine-tuning changes *how* the model responds** — its format, tone, style, and task-specific skill. It is excellent for behavior you can demonstrate with examples but struggle to fully specify in a prompt.\n\n**Fine-tuning is a terrible way to inject *what* the model knows.** Facts baked into weights are frozen at training time, can't be cited, are expensive to update, and *increase* hallucination risk because the model can't distinguish what it half-memorized from what it knows. For facts, use **RAG** — knowledge updates the instant a document changes, and every answer can show its source.\n\nThey compose beautifully: **fine-tune the behavior, retrieve the facts.** A support model fine-tuned to your house style and escalation rules, answering from a live RAG index of current policies, is the canonical production shape." },
+
+            { type: "decision", heading: "Prompt vs RAG vs Fine-Tune", rows: [
+              ["Behavior is off: format, tone, style, refusals", "Prompt first; fine-tune only if prompting can't hold it"],
+              ["Model lacks facts: private, fresh, or changing knowledge", "RAG — do not fine-tune facts in (stale, unverifiable)"],
+              ["Need one consistent output format at scale", "Structured-output mode (m3l2) first; fine-tune if needed"],
+              ["High volume, narrow task, cost & latency matter", "Distill a small fine-tuned model from a big one"],
+              ["Requirements change weekly", "Prompt / RAG — fine-tuning can't keep up with the churn"],
+              ["Data can't leave your tenant / must run on-device", "Self-hosted open-weight or small model (SLM)"],
+              ["You have fewer than ~100 quality labeled examples", "Prompt + few-shot — you can't fine-tune well yet"],
+            ]},
+
+            { type: "text", heading: "When Fine-Tuning Actually Pays Off", body: "It's the right tool more rarely than people think, but when it fits, nothing else matches it:\n\n**A consistent format, style, or tone** you can demonstrate with hundreds of examples but can't pin down in words — brand voice, a rigid report structure, a domain's house style.\n**A narrow, high-volume task** where a fine-tuned small model beats a prompted frontier model on cost *and* latency (this is usually distillation — next block).\n**A skill that resists prompting** — a specialized classification or extraction task where even good few-shot prompts plateau below your bar.\n**Prompt compression** — folding a giant few-shot prompt into the weights so you stop paying for those example tokens on every single call (m2l4).\n\nEvery one of these needs enough high-quality labeled data (typically hundreds to thousands of examples) **and** an eval proving the fine-tune beat the prompted baseline (m3l4). No eval, no fine-tune — you'd have no way to know it helped." },
+
+            { type: "text", heading: "Distillation: Make a Small Model Do a Big Model's Job", body: "The highest-leverage customization pattern in production. Use a strong, expensive **teacher** model to generate ideal outputs or labels for your task, then **fine-tune a small, cheap student** model on those examples.\n\nThe student can't match the teacher at *everything* — but on *your one narrow task* it gets remarkably close, at a fraction of the per-call cost and latency. This is how you get near-frontier quality at small-model prices: let the big model do the hard thinking once (to create the dataset), then bottle that behavior into a model small enough to serve cheaply at scale. It pairs naturally with model routing (m2l4): the distilled student handles the routine 80%, the frontier model handles the hard 20%." },
+
+            { type: "code", heading: "Distillation: Teacher Generates, Student Learns", lang: "python", code: `# A strong "teacher" labels your data; you fine-tune a small, cheap "student"
+# on its answers. The student approaches teacher quality on THIS narrow task.
+
+from anthropic import Anthropic
+import json
+
+client = Anthropic()
+
+# Your real, unlabeled inputs -- mine these from production traffic.
+INPUTS = ["customer email 1 ...", "customer email 2 ...", "..."]
+
+# 1. Teacher (expensive, high quality) produces the "ideal" output.
+def teacher_label(text):
+    r = client.messages.create(
+        model="claude-opus-4-6",          # strong teacher
+        max_tokens=512,
+        messages=[{"role": "user",
+                   "content": f"Extract name, intent, urgency as JSON from:\\n{text}"}],
+    )
+    return r.content[0].text
+
+# 2. Build a supervised fine-tuning dataset from the teacher's answers.
+sft_data = [{"prompt": x, "completion": teacher_label(x)} for x in INPUTS]
+with open("sft.jsonl", "w") as f:
+    for row in sft_data:
+        f.write(json.dumps(row) + "\\n")
+
+# 3. Fine-tune a SMALL model on sft.jsonl with LoRA (the trainer is in m2l3).
+#    Result: an ~8B student doing this one task close to the teacher's quality,
+#    at a fraction of the cost and latency -- validate the gap on an eval set.` },
+
+            { type: "text", heading: "Synthetic Data: When You Don't Have Enough Examples", body: "Fine-tuning and evaluation both need data you often don't have. So generate it: prompt a strong model to produce diverse, realistic examples — including the edge cases and failure modes you want covered. For classification, generate per class; for extraction, vary formats and difficulty; for chat, simulate the awkward multi-turn cases.\n\nThe cautions matter as much as the technique:\n**Validate quality** — garbage synthetic data trains a garbage model. Spot-check it like real data.\n**Force diversity** — models left to themselves produce samey, low-variance output; vary prompts, seeds, personas, and difficulty explicitly.\n**Watch for inherited errors and bias** — the teacher's mistakes and biases propagate straight into your student (m9l2).\n**Never let synthetic data be your only eval** — your held-out test set must contain *real* inputs, or you're grading the model on its own imagination.\n**Check the terms** — some providers restrict using their model's outputs to train competing models; confirm before you build on it (m9l2)." },
+
+            { type: "text", heading: "Small & On-Device Models (SLMs)", body: "Not every problem needs a frontier model — and defaulting to one is often the expensive wrong answer (m1l1: bigger isn't always better). **Small language models** (roughly 1B–14B parameters) and on-device deployment win in specific, common situations:\n\n**Privacy / data residency** — runs entirely inside your tenant or on the device; data never leaves (m1l3, m6l7).\n**Latency** — no network round-trip; on-device inference can be near-instant.\n**Cost at volume** — at high, steady request rates, a self-hosted small model undercuts per-token API pricing (m2l4).\n**Offline** — works with no connectivity.\n\nThe trade is a lower ceiling on open-ended reasoning. But here's the key insight: for a *narrow, distilled* task, that ceiling rarely matters — a small specialized model is frequently indistinguishable from a frontier one on the job it was tuned for, while costing and latency-ing a fraction as much." },
+
+            { type: "diagram", heading: "The Customization Ladder", variant: "flow", nodes: [
+              { label: "Prompt", detail: "minutes, free" },
+              { label: "+ Few-shot", detail: "examples in context" },
+              { label: "+ RAG", detail: "for facts" },
+              { label: "Fine-tune", detail: "for behavior" },
+              { label: "Distill → SLM", detail: "cheap at scale" },
+            ], caption: "Each rung costs more and is harder to reverse. Climb only as far as your eval (m3l4) requires — most problems stop at rung 1 or 2." },
+
+            { type: "text", heading: "Fine-Tuning Pitfalls", body: "If you do climb to fine-tuning, these are what bite:\n\n**Catastrophic forgetting** — over-tuning on a narrow dataset can degrade the model's general ability. LoRA (m2l3), a light touch, and mixing in general examples all mitigate it.\n**Data quality dominates** — a few thousand clean, consistent examples beat tens of thousands of noisy ones. Most of the work is data, not training.\n**No before/after eval = flying blind** — measure the prompted baseline and the fine-tuned model on the *same held-out set* (m3l4), or you can't claim it helped.\n**It's a versioned artifact, not set-and-forget** — your adapter is part of the deployable `(code, prompt, model, index)` tuple (m7l4), and you'll re-tune when base models deprecate or inputs drift.\n**Budget the whole cost** — data labeling and eval often cost more than the GPU time everyone focuses on." },
+
+            { type: "checklist", heading: "Customization Essentials", items: [
+              "Climb the ladder: prompt → RAG → fine-tune → distill; stop at the first rung your eval passes",
+              "Fine-tune for behavior and form; retrieve for facts — never bake changing facts into weights",
+              "Prove any fine-tune beats the prompted baseline on a held-out eval set (m3l4) before shipping",
+              "Distillation (teacher → student) is the cheapest route to near-frontier quality at small-model cost",
+              "Generate synthetic data when examples are scarce — but validate its quality and diversity, and keep real data in your eval",
+              "Smaller specialized models often win on cost, latency, and privacy; the frontier default is frequently overkill",
+              "Version fine-tuned adapters as part of the deployable tuple (m7l4); plan to re-tune as base models deprecate",
+              "Budget for data labeling, not just GPU time — data quality dominates the outcome",
             ]}
           ]
         }

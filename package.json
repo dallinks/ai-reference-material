@@ -6,7 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "export:md": "node scripts/export-markdown.mjs",
+    "export:html": "node scripts/export-html.mjs",
+    "export:assessments": "node scripts/export-assessments.mjs",
+    "export:metadata": "node scripts/export-metadata.mjs",
+    "export": "npm run export:md && npm run export:html && npm run export:assessments && npm run export:metadata",
+    "build:epub": "pandoc export/markdown/COURSE.md -o export/course.epub --toc --metadata title=\"AI Implementation Reference\"",
+    "build:pdf": "pandoc export/markdown/COURSE.md -o export/course.pdf --toc"
   },
   "dependencies": {
     "react": "^18.3.1",

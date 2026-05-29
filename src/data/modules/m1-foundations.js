@@ -3,7 +3,7 @@ export default
       id: "m1", number: "01", title: "AI Foundations", accent: "#FF6B35",
       desc: "The landscape of artificial intelligence — taxonomy, capabilities, and why it matters now.",
       lessons: [
-        { id: "m1l1", title: "What Is AI, Really?", duration: "16 min", tags: ["concepts","intro","mental-models","mechanics"],
+        { id: "m1l1", preview: true, title: "What Is AI, Really?", duration: "16 min", tags: ["concepts","intro","mental-models","mechanics"],
           content: [
             { type: "text", heading: "Beyond the Buzzwords", body: "AI is pattern recognition at scale. Every AI system — from spam filters to GPT-4 — works by finding statistical patterns in data and using those patterns to make predictions or decisions.\n\nAI is NOT magic. It's mathematics. Understanding this is the foundation for everything else — so before the taxonomy and the buzzwords, let's look at the actual mechanism that makes all of it work." },
 
@@ -58,7 +58,7 @@ for example_input, correct_output in training_data:
             ]}
           ]
         },
-        { id: "m1l2", title: "ML vs Deep Learning vs GenAI", duration: "17 min", tags: ["concepts","ml","mechanics","mental-models"],
+        { id: "m1l2", preview: true, title: "ML vs Deep Learning vs GenAI", duration: "17 min", tags: ["concepts","ml","mechanics","mental-models"],
           content: [
             { type: "text", heading: "The Hierarchy", body: "Think nested circles: AI → Machine Learning → Deep Learning → Generative AI. Each layer adds capability and complexity." },
 
@@ -122,13 +122,21 @@ model = NeuralNetwork(layers=12).fit(X, labels)
             ]}
           ]
         },
-        { id: "m1l3", title: "The Current AI Landscape", duration: "14 min", tags: ["concepts","landscape","strategy","models"],
+        { id: "m1l3", preview: true, title: "The Current AI Landscape", duration: "14 min", tags: ["concepts","landscape","strategy","models"],
           content: [
             { type: "text", heading: "The Players", body: "**Frontier Labs** — OpenAI (GPT), Anthropic (Claude), Google DeepMind (Gemini), Meta (Llama)\n\n**Cloud Platforms** — Azure AI, AWS Bedrock, Google Vertex AI\n\n**Open Source** — Hugging Face, Meta Llama, Mistral\n\n**Tooling** — LangChain, LlamaIndex, Semantic Kernel" },
+
+            { type: "text", heading: "A Note on Model Names (Read Once, Apply Throughout)", body: "This course names specific models — GPT, Claude, Gemini, Llama, and others — because concrete examples beat vague abstractions. But **treat every model name as a snapshot, not a fact.** This material reflects the landscape as of **early 2026**; whichever model leads a given benchmark will have changed by the time you read this, probably more than once.\n\nWhat *doesn't* change is the reasoning. \"Pick the cheapest model that passes your eval,\" \"output tokens cost more than input,\" \"retrieve for facts, fine-tune for behavior\" — these outlive any model generation. So when you see a model name, read it as *\"a model in this capability and price tier,\"* and re-check today's real options against the **criteria** each lesson gives you (model cards here in m1l3; the full selection process in m2l5). The durable skill is the decision framework, not the current leaderboard." },
 
             { type: "text", heading: "Why the Landscape Looks Like This", body: "The shape of the market follows directly from three economic facts.\n\n**Training frontier models is brutally expensive.** A single state-of-the-art training run costs tens to hundreds of millions of dollars in compute. That's why only a handful of well-capitalized labs build frontier base models — and why each is backed by, or partnered with, a cloud giant.\n\n**Compute is the bottleneck.** Training needs tens of thousands of high-end GPUs. NVIDIA designs the chips nearly everyone uses, which is why a chipmaker became one of the most valuable companies on earth. Access to GPUs, not ideas, is often the gating constraint.\n\n**Data is the other bottleneck.** The easily-scraped public internet has largely been consumed. The next gains increasingly come from proprietary, licensed, and synthetic data — which is exactly why your organization's unique data is a genuine competitive asset.\n\nUnderstand these forces and the rest of the landscape — the partnerships, the pricing, the open-vs-closed fight — stops looking like chaos and starts looking like consequences." },
 
             { type: "text", heading: "The Three Layers of the Stack", body: "It helps to see the ecosystem as three layers:\n\n**1. Model layer** — The foundation models themselves (GPT, Claude, Gemini, Llama, Mistral). Enormous cost to produce, increasingly commoditized to consume. A few players.\n\n**2. Platform layer** — Clouds that host and serve models with enterprise plumbing: Azure AI Foundry, AWS Bedrock, Google Vertex AI. They wrap raw models in security, networking, scaling, and compliance.\n\n**3. Tooling & application layer** — Orchestration (Semantic Kernel, LangChain, LlamaIndex), vector databases, eval tools, and the actual products built on top.\n\n**As an implementor, you live in layers 2 and 3.** You almost never train a model (layer 1); you compose, ground, and deploy them. That's where the work — and most of the durable value — is." },
+
+            { type: "diagram", heading: "The Three Layers of the Stack", variant: "stack", nodes: [
+              { label: "Tooling & Application", detail: "orchestration, vector DBs, evals — and your product" },
+              { label: "Platform", detail: "Azure AI · Bedrock · Vertex — security, scaling, compliance" },
+              { label: "Model", detail: "GPT · Claude · Gemini · Llama · Mistral" },
+            ], caption: "You build in the top two layers — composing and grounding models you rent from the bottom one. Value migrates upward as the model layer commoditizes." },
 
             { type: "text", heading: "Open vs Closed (Proprietary) Models", body: "A central fault line in the landscape is **open-weight** vs **closed (API-only)** models.\n\n**Closed / proprietary** (GPT-4, Claude, Gemini) — You call them over an API. Usually the most capable, with zero infrastructure to manage. But you can't see the weights, your data leaves your environment (subject to the provider's terms), and you're exposed to price and availability changes.\n\n**Open-weight** (Llama, Mistral, and many others) — The weights are downloadable. You can run them in your own environment, fine-tune freely, inspect them, and pin a version forever. The trade: you manage the infrastructure and GPUs, and the very best open model typically trails the very best closed model by 6–18 months.\n\nNote: \"open-weight\" rarely means fully open-source — training data and code are usually withheld, and licenses can restrict commercial use. Always read the license." },
 

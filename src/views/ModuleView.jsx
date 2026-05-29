@@ -1,5 +1,7 @@
 import { theme } from "../theme.js";
 import { HeaderBar } from "../components/HeaderBar.jsx";
+import { ASSESSMENTS } from "../data/assessments.js";
+import { useAssessmentScores } from "../hooks/useAssessmentScores.js";
 
 function TypeChip({ kind }) {
   const tint = theme.chip[kind] || theme.chip.neutral;
@@ -21,6 +23,9 @@ function TypeChip({ kind }) {
 
 export function ModuleView({ mod, completed, onGo }) {
   const doneCount = mod.lessons.filter((l) => completed.has(l.id)).length;
+  const { scores } = useAssessmentScores();
+  const hasAssessment = !!ASSESSMENTS[mod.id];
+  const bestScore = scores[mod.id];
 
   return (
     <div
@@ -136,9 +141,26 @@ export function ModuleView({ mod, completed, onGo }) {
                     >
                       {lesson.duration}
                     </span>
+                    {lesson.preview && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          fontFamily: theme.font.mono,
+                          letterSpacing: 0.5,
+                          color: "#062b24",
+                          background: theme.accent.teal,
+                          padding: "1px 6px",
+                          borderRadius: theme.radius.sm,
+                        }}
+                      >
+                        FREE
+                      </span>
+                    )}
                     {types.includes("code") && <TypeChip kind="code" />}
                     {types.includes("checklist") && <TypeChip kind="checklist" />}
                     {types.includes("decision") && <TypeChip kind="decision" />}
+                    {types.includes("diagram") && <TypeChip kind="diagram" />}
                   </div>
                 </div>
                 <span style={{ color: theme.textDimmest, fontSize: 16 }}>→</span>
@@ -146,6 +168,61 @@ export function ModuleView({ mod, completed, onGo }) {
             </div>
           );
         })}
+
+        {hasAssessment && (
+          <div
+            onClick={() => onGo("assessment", mod)}
+            style={{
+              padding: "18px 22px",
+              background: `${mod.accent}0d`,
+              border: `1px solid ${mod.accent}40`,
+              borderRadius: theme.radius.xl,
+              marginTop: 18,
+              cursor: "pointer",
+              transition: "background 0.15s",
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = `${mod.accent}1a`)}
+            onMouseOut={(e) => (e.currentTarget.style.background = `${mod.accent}0d`)}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  background: mod.accent,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                  color: theme.bg,
+                  flexShrink: 0,
+                }}
+              >
+                ✦
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, color: theme.textStrong, fontWeight: 500 }}>
+                  Module Assessment
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: theme.textFaintest,
+                    fontFamily: theme.font.mono,
+                    marginTop: 4,
+                  }}
+                >
+                  {ASSESSMENTS[mod.id].quiz.length} questions · 1 hands-on exercise
+                  {bestScore !== undefined && (
+                    <span style={{ color: mod.accent }}> · best {bestScore}%</span>
+                  )}
+                </div>
+              </div>
+              <span style={{ color: mod.accent, fontSize: 16 }}>→</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
