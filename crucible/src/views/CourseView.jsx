@@ -68,6 +68,20 @@ export function CourseView({ courseId, onGo }) {
                 </h3>
                 <p style={{ fontSize: 15.5, color: theme.textFaint, margin: "0 0 20px", lineHeight: 1.6 }}>{unit.summary}</p>
 
+                {unit.references?.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <Eyebrow color={theme.textFaintest} style={{ marginBottom: 8 }}>Grounded in</Eyebrow>
+                    <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 5 }}>
+                      {unit.references.map((r, ri) => (
+                        <li key={ri} style={{ fontSize: 12.5, color: theme.textFaint, lineHeight: 1.5, display: "flex", gap: 8 }}>
+                          <span style={{ color: theme.accent.sage }}>§</span>
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {locked ? (
                   <div
                     style={{
