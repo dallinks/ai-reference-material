@@ -1,0 +1,150 @@
+:root {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: "Newsreader", Georgia, "Times New Roman", serif;
+  color: #dbd3c5;
+  background-color: #0b0a09;
+  background-image: radial-gradient(1100px 560px at 50% -8%, rgba(216, 169, 74, 0.07), transparent 62%),
+    radial-gradient(820px 480px at 96% 3%, rgba(204, 107, 62, 0.045), transparent 56%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+::selection {
+  background: rgba(216, 169, 74, 0.3);
+  color: #f4eee1;
+}
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(231, 210, 165, 0.13);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(231, 210, 165, 0.22);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+input {
+  font-family: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(216, 169, 74, 0.6);
+  outline-offset: 2px;
+}
+
+.btn {
+  transition: filter 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    transform 0.06s ease, box-shadow 0.15s ease;
+}
+.btn:not(:disabled):active {
+  transform: scale(0.985);
+}
+.btn-primary:not(:disabled):hover {
+  filter: brightness(1.07);
+  box-shadow: 0 8px 26px -10px rgba(216, 169, 74, 0.5);
+}
+.btn-outline:not(:disabled):hover {
+  filter: brightness(1.13);
+}
+.btn-ghost:not(:disabled):hover {
+  border-color: rgba(231, 210, 165, 0.26);
+  color: #dbd3c5;
+}
+
+.card {
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.card-hover {
+  cursor: pointer;
+}
+.card-hover:hover {
+  border-color: rgba(231, 210, 165, 0.22) !important;
+  background: rgba(245, 238, 225, 0.04) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 18px 48px -22px rgba(0, 0, 0, 0.7);
+}
+.row {
+  transition: background 0.14s ease, transform 0.12s ease;
+}
+.row:hover {
+  background: rgba(245, 238, 225, 0.055) !important;
+  transform: translateX(2px);
+}
+
+input.field {
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+input.field:focus {
+  outline: none;
+  border-color: rgba(216, 169, 74, 0.55) !important;
+  box-shadow: 0 0 0 3px rgba(216, 169, 74, 0.12);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.rise-2 {
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) 0.06s both;
+}
+.rise-3 {
+  animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) 0.12s both;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade {
+  animation: fade 0.5s ease both;
+}
+@keyframes flipIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.flip-in {
+  animation: flipIn 0.3s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
