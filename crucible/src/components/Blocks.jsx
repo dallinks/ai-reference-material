@@ -1,4 +1,5 @@
 import { theme } from "../theme.js";
+import { Diagram } from "./Diagram.jsx";
 
 function rich(body) {
   return String(body)
@@ -151,6 +152,81 @@ function CheckList({ heading, items }) {
   );
 }
 
+// Theorem-family block: a labelled statement with an inline proof — the bread
+// and butter of a rigorous text. `definition` has no ∎ and reads upright; the
+// rest are italic statements followed by a proof.
+function Theorem({ kind = "theorem", name, statement, proof }) {
+  const isDef = kind === "definition";
+  const c = isDef ? theme.accent.sage : theme.accent.gold;
+  return (
+    <div
+      style={{
+        marginBottom: 34,
+        border: `1px solid ${c}2e`,
+        borderLeft: `2.5px solid ${c}`,
+        borderRadius: theme.radius.lg,
+        padding: "17px 20px",
+        background: `${c}09`,
+      }}
+    >
+      <div style={{ fontFamily: theme.font.mono, fontSize: 10.5, letterSpacing: 2, color: c, marginBottom: 11, textTransform: "uppercase" }}>
+        {kind}
+        {name ? ` · ${name}` : ""}
+      </div>
+      <div style={{ ...bodyStyle, fontSize: 16.5, lineHeight: 1.7, color: theme.textStrong, fontStyle: isDef ? "normal" : "italic" }}>{rich(statement)}</div>
+      {proof && (
+        <div style={{ marginTop: 15, paddingTop: 13, borderTop: `1px solid ${c}22` }}>
+          <span style={{ fontFamily: theme.font.mono, fontSize: 10.5, color: theme.textFaint, letterSpacing: 1.5 }}>PROOF</span>
+          <div style={{ ...bodyStyle, fontSize: 15.5, lineHeight: 1.75, marginTop: 7 }}>{rich(proof)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const revealBody = {
+  margin: "8px 0 2px",
+  padding: "11px 15px",
+  background: "rgba(255,250,240,0.022)",
+  borderLeft: `2px solid ${theme.accent.sage}44`,
+  borderRadius: theme.radius.sm,
+  fontSize: 15,
+  lineHeight: 1.7,
+  color: "#C6BDAD",
+  whiteSpace: "pre-line",
+};
+
+// Exercises block: a textbook-style problem set. Each problem can carry a hint
+// and a worked solution, revealed on click (native <details>, no JS state) so
+// the reader attempts it first.
+function Exercises({ heading = "Exercises", items }) {
+  const c = theme.accent.gold;
+  return (
+    <div style={{ marginBottom: 34, border: `1px solid ${theme.border}`, borderRadius: theme.radius.lg, padding: "18px 20px 20px", background: theme.surface }}>
+      <div style={{ fontFamily: theme.font.mono, fontSize: 11, letterSpacing: 2, color: c, marginBottom: 4, textTransform: "uppercase" }}>{heading}</div>
+      <ol style={{ margin: 0, padding: "0 0 0 22px", display: "grid", gap: 18 }}>
+        {items.map((it, i) => (
+          <li key={i} style={{ fontSize: 16, lineHeight: 1.7, color: "#CCC3B3", paddingLeft: 4 }}>
+            <div>{rich(it.prompt)}</div>
+            {it.hint && (
+              <details className="reveal" style={{ marginTop: 7 }}>
+                <summary>Hint</summary>
+                <div style={revealBody}>{rich(it.hint)}</div>
+              </details>
+            )}
+            {it.solution && (
+              <details className="reveal" style={{ marginTop: 5 }}>
+                <summary>Solution</summary>
+                <div style={revealBody}>{rich(it.solution)}</div>
+              </details>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 export function Blocks({ items }) {
   return items.map((b, i) => {
     if (b.type === "example") return <Example key={i} {...b} />;
@@ -158,6 +234,9 @@ export function Blocks({ items }) {
     if (b.type === "code") return <Code key={i} {...b} />;
     if (b.type === "decision") return <Decision key={i} {...b} />;
     if (b.type === "checklist") return <CheckList key={i} {...b} />;
+    if (b.type === "diagram") return <Diagram key={i} block={b} />;
+    if (b.type === "theorem") return <Theorem key={i} {...b} />;
+    if (b.type === "exercises") return <Exercises key={i} {...b} />;
     return <Text key={i} {...b} />;
   });
 }

@@ -10,8 +10,28 @@ Backlog of future work, kept with the content. Current courses: `algorithms`
 **Built:** Arc 1 — Asymptotic Analysis · Divide & Conquer/Recurrences · Sorting &
 Selection · Hashing · BSTs & Balance. Arc 2 — Graph Traversal · Shortest Paths ·
 Greedy · Dynamic Programming. Arc 3 — Amortized Analysis · Maximum Flow ·
-NP-Completeness · Approximation & Randomized Algorithms. (13 units, 39 lessons,
-26 proof-graded questions.)
+NP-Completeness · Approximation & Randomized Algorithms. (13 units, ~46 lessons,
+26 proof-graded gate questions.)
+
+**Now FULL TEXTBOOK DEPTH (all 13 units).** Every lesson was rebuilt into a
+complete textbook section — formal `definition`s, key results as `theorem` blocks
+with **inline proofs**, multiple worked examples, and an in-text `exercises` set
+with solutions (now ~32–54 content blocks/unit, was ~9–18). Generated +
+adversarially verified (21 defects caught/fixed); the few unverified units were
+self-audited. Tooling: `scripts/extract-units.mjs` + `scripts/apply-deep-lessons.mjs`.
+**Entrepreneurship is now FULL TEXTBOOK DEPTH too** (all 9 units, ~187 blocks,
+55 theorem/def blocks, 27 exercise sets) — done inline, with the quantitative
+spine derived (LTV geometric series, dilution, vesting, viral-k, Metcalfe) and
+qualitative frameworks given formal definitions + worked examples + exercises.
+**Cloud Architecture is now FULL TEXTBOOK DEPTH too** (all 9 units, ~184 blocks,
+76 theorem/def blocks, 27 exercise sets, 7 diagrams) — the most theorem-dense
+course (Amdahl, Little's Law, M/M/1, USL, availability composition, CAP, Lamport,
+quorum, consistent hashing, exactly-once/backpressure, backoff, tail-at-scale,
+FLP, defense-in-depth, cost-of-nines), all derived inline.
+
+**All three main graduate courses are now full textbook depth** (Algorithms 13u,
+Entrepreneurship 9u, Cloud 9u). Only the probability seed (2-unit demo) remains
+shallow. Reusable deepening tooling: `scripts/{extract-units,splice-lessons,apply-deep-lessons}.mjs`.
 
 ### Arc 4 — candidate new units
 - **Advanced data structures** — Fibonacci heaps, B-trees, segment / Fenwick
@@ -54,9 +74,14 @@ NP-Completeness · Approximation & Randomized Algorithms. (13 units, 39 lessons,
 
 ## Platform (cross-course — but high impact for this course)
 
-- **Diagram block type** — graphs, trees, recursion trees, and DP tables badly
-  want visuals; `Blocks.jsx` has no diagram renderer yet (the sibling AI course
-  app had one). Highest-leverage single addition for algorithms.
+- ~~**Diagram block type**~~ — **done.** `components/Diagram.jsx`: zero-dep SVG,
+  three kinds — `recursion` (work-accounted recursion trees), `graph` (flow
+  networks / weighted graphs / BSTs / topologies), `sequence` (message
+  timelines). Shape-validated in `schema.js`, documented in `AUTHORING.md`.
+  Seeded into three lessons: the 2T(n/2)+cn recursion-tree proof (a2l2), the
+  CLRS max-flow network (a11l1), and the Gilbert–Lynch CAP execution (cloud
+  c3l2). *Still open:* DP-table / matrix diagrams, and back-porting visuals to
+  more units (Dijkstra graphs, BST rotations, quorum intersection).
 - **Interactive visualizers** — animate BFS / Dijkstra / DP fills (bigger lift).
 - **Timed-exam mode** + a **cross-course transcript / GPA**.
 - **Move the API key off the browser** (a small local proxy).

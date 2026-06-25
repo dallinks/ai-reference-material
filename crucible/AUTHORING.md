@@ -56,8 +56,94 @@ export const <id> = {
 | `code`      | `heading`, `lang`, `code`               | code/derivation listings |
 | `decision`  | `heading`, `rows: [[left, right], ...]` | "if X → do Y" tables |
 | `checklist` | `heading`, `items: [string]`            | procedures/criteria |
+| `diagram`   | `kind` + kind-specific fields (see below) | recursion trees, graphs, sequence diagrams |
+| `theorem`   | `kind`, `name`, `statement`, `proof`    | a stated result with an inline proof |
+| `exercises` | `heading`, `items: [{prompt, solution, hint?}]` | end-of-section problem set with worked solutions |
 
 `body` supports `**bold**` and `*italic*` and respects line breaks.
+
+### Diagram blocks
+
+`diagram` renders to hand-built SVG (zero dependencies, `components/Diagram.jsx`)
+in the Editorial/Ink palette. The renderer **transcribes** author-provided
+structure — it never computes the math, so correctness is the author's job (the
+diagram should restate a result the lesson already proves). Every diagram takes
+an optional `caption`. Three kinds:
+
+**`recursion`** — a recursion tree with explicit per-level *work accounting*
+(the visual proof of a Master-Theorem bound). `levels[]` top-to-bottom + `total`:
+```js
+{ type: "diagram", kind: "recursion", caption: "...",
+  levels: [
+    { n: 1, each: "cn",   row: "cn" },          // n = node count (number or symbol),
+    { n: 2, each: "cn/2", row: "cn" },          // each = work/node, row = level total
+    { ellipsis: true, row: "cn" },              // collapsed level (draws ⋮)
+    { n: "n", each: "c", row: "cn", leaf: true, leafLabel: "n leaves" },
+  ],
+  total: "cn(lg n + 1) = Θ(n lg n)" }           // the Σ shown under the gutter
+```
+Optional per-level: `draw` (dots to render, default = numeric `n` capped at 8),
+`tone` ("gold"|"sage"|…). The right gutter shows `n × each = row`, the rigor.
+
+**`graph`** — positioned node-link: flow networks, weighted/shortest-path graphs,
+BSTs, quorum/CAP topologies. Nodes carry `x,y` in **0..100**:
+```js
+{ type: "diagram", kind: "graph", directed: true, height: 300, caption: "...",
+  nodes: [ { id: "s", label: "s", x: 4, y: 50, tone: "gold" }, … ],   // optional sub, r, tone
+  edges: [ { from: "s", to: "v1", label: "16", tone: "sage", bold: true }, … ] }
+```
+Per-edge: `directed` (overrides the block default), `dashed`, `bold`, `tone`, `label`.
+
+**`sequence`** — message/timeline: the Gilbert–Lynch CAP execution, Lamport
+happens-before, quorum reads, consensus rounds. `actors[]` are lanes:
+```js
+{ type: "diagram", kind: "sequence", caption: "...",
+  actors: ["Writer", "N₁", "N₂", "Reader"],
+  messages: [
+    { from: "Writer", to: "N₁", label: "write x=v1", tone: "sage" },
+    { from: "N₁", to: "N₂", label: "replicate — lost", tone: "rust", dashed: true },
+    { note: "✂ partition — messages dropped" },   // centered note (optional `at: actor`)
+  ] }
+```
+Per-message: `dashed` (async/return), `tone`, `tick` (a clock value, e.g. Lamport).
+A `from === to` message draws a self-loop. Notes span centered, or pin to `at`.
+
+Diagram **shape is validated** (`lib/schema.js`): bad `kind`, missing `levels`/
+`nodes`/`actors`, non-numeric node coords, or an edge/message naming an unknown
+node/actor all fail `npm run validate`. Use it — a diagram that references a
+node id you didn't define is a hard error, not a silent blank.
+
+### Theorem & exercises blocks (the spine of a textbook section)
+
+A rigorous lesson does not merely *state* its key results — it **proves them in
+the text**, and gives the reader **problems to work**. Two blocks carry that:
+
+**`theorem`** — a labelled statement with an inline proof:
+```js
+{ type: "theorem", kind: "theorem", name: "Transitivity",
+  statement: "If f = O(g) and g = O(h), then f = O(h).",
+  proof: "From f = O(g): ∃ c₁,n₁ … therefore f = O(h). ∎" }
+```
+`kind` ∈ `theorem | lemma | corollary | proposition | definition`. A
+`definition` may omit `proof`; **every other kind MUST include one** — that rule
+is enforced by `npm run validate`, because an unproven "theorem" is exactly the
+lecture-notes shortcut this format exists to forbid. `statement` renders italic
+(upright for definitions); `proof` follows under a PROOF rule. Both support
+`**bold**`/`*italic*` and line breaks. End proofs with ∎.
+
+**`exercises`** — a problem set with worked solutions, revealed on click so the
+reader attempts first:
+```js
+{ type: "exercises", heading: "Exercises", items: [
+  { prompt: "Prove 10n² + 7n + 3 = O(n²).",
+    solution: "For n ≥ 1, 10n²+7n+3 ≤ 20n²; c=20, n₀=1. ∎",
+    hint: "Bound each lower-order term by a multiple of n²." },   // hint optional
+] }
+```
+Each item needs a `prompt` and a `solution` (a `hint` is optional); both are
+validated. Solutions render behind a collapsed "Solution" toggle. Aim for 3–6
+problems that demand *transfer* (prove a new bound, find the bug, derive a
+formula), graded in difficulty.
 
 ### Question types (mastery checks)
 
@@ -132,11 +218,16 @@ These are non-negotiable if "mastery" is to mean anything:
 >
 > Output a single JS module exactly matching `crucible/AUTHORING.md`:
 > `export const <id> = { ... }`. Follow every rigor rule. Specifically:
-> - <N> units, each building on the last, each with 2–4 lessons.
-> - Each lesson: 3–5 content blocks + 3–6 atomic review cards.
+> - <N> units, each building on the last, each with 3–5 lessons.
+> - **Each lesson is a full textbook section**, not a summary: 8–14 content blocks
+>   developing the topic — motivation, formal `definition`s, the key results as
+>   `theorem` blocks *with inline proofs*, 3–6 worked `example`s, and a closing
+>   `exercises` set (3–6 problems with worked solutions). Plus 4–6 atomic review
+>   cards. If a lesson sprawls past one coherent topic, split it.
 > - Each unit: a mastery check of 4–6 questions that test *application*, at least
 >   half `numeric`/`short`, threshold 0.85, every question with an `explanation`.
-> - Faithful notation; worked examples over invented ones.
+> - Faithful notation; worked examples adapted from canonical problems over
+>   invented ones; **prove the results you rely on** rather than asserting them.
 >
 > Before finishing, mentally run it against the schema. Then I'll drop it in
 > `src/data/courses/`, register it in `src/data/index.js`, and run `npm run validate`.

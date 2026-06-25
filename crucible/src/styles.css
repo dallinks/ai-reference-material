@@ -140,6 +140,36 @@ input.field:focus {
 .flip-in {
   animation: flipIn 0.3s ease both;
 }
+/* Reveal toggles for exercise solutions/hints (textbook-style problem sets) */
+details.reveal > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #7fb59b;
+  padding: 3px 0;
+  transition: color 0.14s ease;
+}
+details.reveal > summary::-webkit-details-marker {
+  display: none;
+}
+details.reveal > summary::before {
+  content: "▸";
+  font-size: 9px;
+  transition: transform 0.16s ease;
+}
+details.reveal[open] > summary::before {
+  transform: rotate(90deg);
+}
+details.reveal > summary:hover {
+  color: #90c1a8;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
