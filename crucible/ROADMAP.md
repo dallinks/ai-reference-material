@@ -33,6 +33,15 @@ FLP, defense-in-depth, cost-of-nines), all derived inline.
 Entrepreneurship 9u, Cloud 9u). Only the probability seed (2-unit demo) remains
 shallow. Reusable deepening tooling: `scripts/{extract-units,splice-lessons,apply-deep-lessons}.mjs`.
 
+**A fourth full course was built from scratch: `langgraph` — "Building Agents with
+LangChain & LangGraph"** (9 units, 177 blocks, 20 Python code blocks, 7 diagrams,
+APIs web-verified against docs.langchain.com). LangGraph-centered, anchored in the
+durable layer (Pregel/BSP execution, graph semantics, retrieval math, the agent
+papers), cross-linking the algorithms and cloud courses. New tooling for building
+a course unit-by-unit: `scripts/insert-unit.mjs`. **5 courses total.** Future:
+deepen the probability seed; consider courses on systems/ML/etc.; back-port more
+diagrams; the platform features (timed exams, transcript, off-browser key) still open.
+
 ### Arc 4 — candidate new units
 - **Advanced data structures** — Fibonacci heaps, B-trees, segment / Fenwick
   trees, tries (union-find's α(n) is now covered in Arc 3's Amortized Analysis).
