@@ -26,7 +26,6 @@ no key and stay fully offline.
 ## Run it
 
 ```bash
-cd crucible
 npm install
 npm run dev        # http://localhost:3001
 ```

@@ -4,6 +4,3 @@ dist
 *.local
 .env
 .env.*
-
-# Generated deployment kit — reproduce with `npm run export`
-export
