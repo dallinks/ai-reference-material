@@ -1,28 +1,29 @@
-import m1 from "./modules/m1-foundations.js";
-import m2 from "./modules/m2-llms.js";
-import m3 from "./modules/m3-prompting.js";
-import m4 from "./modules/m4-rag.js";
-import m5 from "./modules/m5-agents.js";
-import m6 from "./modules/m6-enterprise.js";
-import m7 from "./modules/m7-production.js";
-import m8 from "./modules/m8-multimodal.js";
-import m9 from "./modules/m9-strategy.js";
+// Course registry. Generated courses get added here (one import + one array
+// entry). Everything downstream — dashboard, gating, review queue — reads from
+// COURSES, so adding a course is a two-line change.
 
-export const COURSE = {
-  title: "AI Implementation Reference",
-  subtitle: "Build. Deploy. Reference. Repeat.",
-  modules: [m1, m2, m3, m4, m5, m6, m7, m8, m9],
-};
+import { probability } from "./courses/probability.js";
+import { algorithms } from "./courses/algorithms.js";
+import { entrepreneurship } from "./courses/entrepreneurship.js";
+import { cloud } from "./courses/cloud-architecture.js";
+import { langgraph } from "./courses/langgraph.js";
 
-export const totalLessons = COURSE.modules.reduce(
-  (sum, m) => sum + m.lessons.length,
-  0
-);
+export const COURSES = [algorithms, entrepreneurship, cloud, langgraph, probability];
 
-export const allTags = [
-  ...new Set(COURSE.modules.flatMap((m) => m.lessons.flatMap((l) => l.tags))),
-].sort();
+export function getCourse(id) {
+  return COURSES.find((c) => c.id === id) || null;
+}
 
-export const allLessonsFlat = COURSE.modules.flatMap((m) =>
-  m.lessons.map((l) => ({ ...l, mod: m }))
-);
+// Walk a course's lessons and return a flat list of its review items, each
+// tagged with the lesson it came from. Used to seed SRS and build review queues.
+export function reviewItemsOf(course) {
+  const out = [];
+  for (const unit of course.units)
+    for (const lesson of unit.lessons)
+      for (const item of lesson.reviewItems || []) out.push({ unit, lesson, item });
+  return out;
+}
+
+export function findReviewItem(course, itemId) {
+  return reviewItemsOf(course).find((r) => r.item.id === itemId) || null;
+}

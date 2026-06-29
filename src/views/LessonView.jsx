@@ -1,164 +1,67 @@
 import { theme } from "../theme.js";
-import { COURSE } from "../data/index.js";
-import { HeaderBar } from "../components/HeaderBar.jsx";
-import { ContentRenderer } from "../components/ContentRenderer.jsx";
+import { Page, Header, Button, Eyebrow } from "../components/ui.jsx";
+import { Blocks } from "../components/Blocks.jsx";
+import { getCourse } from "../data/index.js";
+import { useProgress } from "../state/useProgress.js";
 
-export function LessonView({ mod, lesson, completed, onToggle, onMarkDone, onGo, contentRef }) {
-  const flat = COURSE.modules.flatMap((m) => m.lessons.map((l) => ({ mod: m, lesson: l })));
-  const idx = flat.findIndex((x) => x.lesson.id === lesson.id);
-  const prev = idx > 0 ? flat[idx - 1] : null;
-  const next = idx < flat.length - 1 ? flat[idx + 1] : null;
-  const done = completed.has(lesson.id);
+export function LessonView({ courseId, unitId, lessonId, onGo }) {
+  const course = getCourse(courseId);
+  const unit = course.units.find((u) => u.id === unitId);
+  const idx = unit.lessons.findIndex((l) => l.id === lessonId);
+  const lesson = unit.lessons[idx];
+  const { progress, markLesson } = useProgress(courseId);
+  const done = progress.lessonsComplete.includes(lesson.id);
+  const next = unit.lessons[idx + 1];
+  const cardCount = lesson.reviewItems?.length || 0;
 
   return (
-    <div
-      ref={contentRef}
-      style={{
-        minHeight: "100vh",
-        background: theme.bg,
-        color: theme.text,
-        fontFamily: theme.font.serif,
-      }}
-    >
-      <HeaderBar
-        backLabel="BACK"
-        onBack={() => onGo("module", mod)}
-        accent={mod.accent}
+    <Page>
+      <Header
+        title={`${course.title} · ${unit.title}`}
+        onBack={() => onGo("course", { courseId })}
         right={
-          <button
-            onClick={() => onToggle(lesson.id)}
-            style={{
-              background: done ? mod.accent : "transparent",
-              border: `1px solid ${mod.accent}`,
-              color: done ? theme.bg : mod.accent,
-              padding: "5px 14px",
-              borderRadius: theme.radius.md,
-              cursor: "pointer",
-              fontFamily: theme.font.mono,
-              fontSize: 11,
-              letterSpacing: 1,
-              fontWeight: 600,
-            }}
-          >
-            {done ? "✓ DONE" : "MARK DONE"}
-          </button>
+          done ? (
+            <span style={{ fontFamily: theme.font.mono, fontSize: 11, letterSpacing: 1, color: theme.status.open }}>◆ Completed</span>
+          ) : (
+            <Button variant="outline" accent={theme.status.open} onClick={() => markLesson(lesson)}>
+              Mark complete
+            </Button>
+          )
         }
       />
-      <div style={{ maxWidth: theme.maxWidth.content, margin: "0 auto", padding: "48px 20px 40px" }}>
-        <div
-          style={{
-            fontFamily: theme.font.mono,
-            fontSize: 11,
-            letterSpacing: 3,
-            color: mod.accent,
-            marginBottom: 10,
-            textTransform: "uppercase",
-          }}
-        >
-          Module {mod.number} · {lesson.duration}
-        </div>
-        <h1
-          style={{
-            fontSize: "clamp(26px,5vw,38px)",
-            fontWeight: 400,
-            lineHeight: 1.2,
-            margin: "0 0 6px",
-            color: theme.textStrong,
-          }}
-        >
+      <div className="rise" style={{ maxWidth: theme.maxWidth.content, margin: "0 auto", padding: "52px 22px 64px" }}>
+        <Eyebrow color={theme.status.open} style={{ marginBottom: 14 }}>
+          Lesson {idx + 1} · {lesson.estMinutes} min
+        </Eyebrow>
+        <h1 style={{ fontSize: "clamp(30px,5vw,44px)", fontWeight: 400, lineHeight: 1.15, letterSpacing: "-0.02em", margin: "0 0 44px", color: theme.textStrong }}>
           {lesson.title}
         </h1>
-        <div style={{ display: "flex", gap: 6, marginBottom: 40, flexWrap: "wrap" }}>
-          {lesson.tags.map((t) => (
-            <span
-              key={t}
-              style={{
-                fontSize: 11,
-                fontFamily: theme.font.mono,
-                color: theme.textFainter,
-                background: theme.surfaceStrong,
-                padding: "2px 8px",
-                borderRadius: theme.radius.sm,
-                letterSpacing: 0.5,
-              }}
-            >
-              {t}
+
+        <Blocks items={lesson.content} />
+
+        <div style={{ borderTop: `1px solid ${theme.borderStrong}`, marginTop: 20, paddingTop: 30, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          {!done ? (
+            <Button accent={theme.status.open} onClick={() => markLesson(lesson)}>
+              Mark complete · seed {cardCount} cards
+            </Button>
+          ) : (
+            <span style={{ fontFamily: theme.font.mono, fontSize: 12, color: theme.status.open, letterSpacing: 0.5 }}>
+              ◆ Completed — {cardCount} cards in review rotation
             </span>
-          ))}
-        </div>
-
-        <ContentRenderer items={lesson.content} accent={mod.accent} />
-
-        <div
-          style={{
-            borderTop: `1px solid ${theme.borderStrong}`,
-            padding: "28px 0 40px",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          {prev ? (
-            <button
-              onClick={() => onGo("lesson", prev.mod, prev.lesson)}
-              style={{
-                background: "none",
-                border: `1px solid ${theme.borderMuted}`,
-                color: theme.textDim,
-                padding: "8px 16px",
-                borderRadius: theme.radius.md,
-                cursor: "pointer",
-                fontFamily: theme.font.mono,
-                fontSize: 12,
-              }}
-            >
-              ← Prev
-            </button>
-          ) : (
-            <div />
           )}
-          {next ? (
-            <button
-              onClick={() => {
-                onMarkDone(lesson.id);
-                onGo("lesson", next.mod, next.lesson);
-              }}
-              style={{
-                background: mod.accent,
-                border: "none",
-                color: theme.bg,
-                padding: "8px 16px",
-                borderRadius: theme.radius.md,
-                cursor: "pointer",
-                fontFamily: theme.font.mono,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              Next →
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                onMarkDone(lesson.id);
-                onGo("home");
-              }}
-              style={{
-                background: mod.accent,
-                border: "none",
-                color: theme.bg,
-                padding: "8px 16px",
-                borderRadius: theme.radius.md,
-                cursor: "pointer",
-                fontFamily: theme.font.mono,
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              Finish ✓
-            </button>
-          )}
+          <div style={{ marginLeft: "auto" }}>
+            {next ? (
+              <Button variant="ghost" onClick={() => onGo("lesson", { courseId, unitId, lessonId: next.id })}>
+                Next lesson →
+              </Button>
+            ) : (
+              <Button accent={theme.status.passed} onClick={() => onGo("mastery", { courseId, unitId })}>
+                To mastery check →
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </Page>
   );
 }

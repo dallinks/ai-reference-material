@@ -1,70 +1,47 @@
-import { theme } from "./theme.js";
-import { useNavigation } from "./hooks/useNavigation.js";
-import { useProgress } from "./hooks/useProgress.js";
-import { useSearch } from "./hooks/useSearch.js";
-import { HomeView } from "./views/HomeView.jsx";
-import { ModuleView } from "./views/ModuleView.jsx";
+import { useState } from "react";
+import { todayStr } from "./lib/srs.js";
+import { DashboardView } from "./views/DashboardView.jsx";
+import { CourseView } from "./views/CourseView.jsx";
 import { LessonView } from "./views/LessonView.jsx";
-import { AssessmentView } from "./views/AssessmentView.jsx";
-import { PathView } from "./views/PathView.jsx";
+import { MasteryCheckView } from "./views/MasteryCheckView.jsx";
+import { ReviewView } from "./views/ReviewView.jsx";
+import { SettingsModal } from "./components/SettingsModal.jsx";
 
-function Loading() {
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: theme.bg,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <div
-        style={{
-          color: theme.textDimmest,
-          fontFamily: theme.font.mono,
-          fontSize: 13,
-          letterSpacing: 2,
-        }}
-      >
-        LOADING...
-      </div>
-    </div>
-  );
-}
-
+// Tiny state router. One view at a time; navigating remounts the target view, so
+// each pulls fresh progress from the store on mount.
 export default function App() {
-  const { view, activeMod, activeLesson, activePath, contentRef, go } = useNavigation();
-  const { completed, ready, toggle, markDone } = useProgress();
-  const search = useSearch();
+  const [route, setRoute] = useState({ view: "dashboard" });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const today = todayStr();
 
-  if (!ready) return <Loading />;
+  const go = (view, params = {}) => {
+    window.scrollTo(0, 0);
+    setRoute({ view, ...params });
+  };
+  const openSettings = () => setSettingsOpen(true);
 
-  if (view === "lesson" && activeMod && activeLesson) {
-    return (
-      <LessonView
-        mod={activeMod}
-        lesson={activeLesson}
-        completed={completed}
-        onToggle={toggle}
-        onMarkDone={markDone}
-        onGo={go}
-        contentRef={contentRef}
-      />
-    );
+  let view;
+  switch (route.view) {
+    case "course":
+      view = <CourseView courseId={route.courseId} onGo={go} />;
+      break;
+    case "lesson":
+      view = <LessonView courseId={route.courseId} unitId={route.unitId} lessonId={route.lessonId} onGo={go} />;
+      break;
+    case "mastery":
+      view = <MasteryCheckView courseId={route.courseId} unitId={route.unitId} onGo={go} onOpenSettings={openSettings} />;
+      break;
+    case "review":
+      view = <ReviewView onGo={go} today={today} />;
+      break;
+    default:
+      view = <DashboardView onGo={go} today={today} onOpenSettings={openSettings} />;
   }
 
-  if (view === "assessment" && activeMod) {
-    return <AssessmentView mod={activeMod} onGo={go} />;
-  }
-
-  if (view === "path" && activePath) {
-    return <PathView path={activePath} completed={completed} onGo={go} />;
-  }
-
-  if (view === "module" && activeMod) {
-    return <ModuleView mod={activeMod} completed={completed} onGo={go} />;
-  }
-
-  return <HomeView completed={completed} search={search} onGo={go} />;
+  return (
+    <>
+      {view}
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </>
+  );
 }
