@@ -4,3 +4,6 @@ dist
 *.local
 .env
 .env.*
+
+# Machine-local SQLite store — the git-synced artifact is data/progress.json
+data/*.db*

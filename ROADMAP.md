@@ -104,4 +104,13 @@ diagrams; the platform features (timed exams, transcript, off-browser key) still
 - **Interactive visualizers** — animate BFS / Dijkstra / DP fills (bigger lift).
 - **Timed-exam mode** + a **cross-course transcript / GPA**.
 - **Move the API key off the browser** (a small local proxy).
-- **FSRS** scheduler upgrade; **IndexedDB / sync** for multi-device review.
+- ~~**Sync / durable storage**~~ — **done** (2026-07-02): the dev server now
+  hosts a store API (`server/store-plugin.js`, zero extra process) over a
+  machine-local **SQLite** db (`node:sqlite`, gitignored) mirrored to a
+  deterministic **`data/progress.json`** snapshot that is **committed and
+  synced via git**. Boot merges snapshot ∪ db with a pure symmetric/idempotent
+  merge (`src/lib/merge.js`: union lessons, best mastery, newest SRS card,
+  per-day-max activity) — diverged machines union losslessly; git conflicts on
+  the snapshot can be resolved either way. Legacy localStorage migrates
+  automatically on first boot; static deploys fall back to localStorage.
+- **FSRS** scheduler upgrade.
