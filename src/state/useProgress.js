@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { loadProgress, saveProgress, resetCourse } from "../lib/store.js";
 import { newCard, schedule, todayStr } from "../lib/srs.js";
+import { logActivity } from "./activity.js";
 
 // React binding over the local-first store for a single course. Holds the
 // course's progress in state and exposes the three things the loop mutates:
@@ -11,6 +12,9 @@ export function useProgress(courseId) {
 
   const markLesson = useCallback(
     (lesson) => {
+      // Streak fuel — outside the updater (StrictMode double-invokes it), and
+      // only the first completion of a lesson counts as study.
+      if (!loadProgress(courseId).lessonsComplete.includes(lesson.id)) logActivity("lesson");
       setProgress((prev) => {
         const today = todayStr();
         const srs = { ...prev.srs };
@@ -31,6 +35,7 @@ export function useProgress(courseId) {
 
   const recordMastery = useCallback(
     (unitId, score) => {
+      logActivity("check"); // every gate attempt is real work
       setProgress((prev) => {
         const cur = prev.mastery[unitId];
         const next = {
@@ -49,6 +54,7 @@ export function useProgress(courseId) {
 
   const gradeReview = useCallback(
     (itemId, grade) => {
+      logActivity("review");
       setProgress((prev) => {
         const today = todayStr();
         const card = prev.srs[itemId] || newCard(today);

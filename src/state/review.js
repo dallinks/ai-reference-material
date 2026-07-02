@@ -5,6 +5,7 @@
 import { COURSES, reviewItemsOf } from "../data/index.js";
 import { loadProgress, saveProgress } from "../lib/store.js";
 import { isDue, newCard, schedule, todayStr } from "../lib/srs.js";
+import { logActivity } from "./activity.js";
 
 export function buildDueQueue(today = todayStr()) {
   const queue = [];
@@ -31,4 +32,5 @@ export function gradeReviewItem(courseId, itemId, grade, today = todayStr()) {
   const card = progress.srs[itemId] || newCard(today);
   progress.srs = { ...progress.srs, [itemId]: schedule(card, grade, today) };
   saveProgress(courseId, progress);
+  logActivity("review", today); // streak fuel
 }

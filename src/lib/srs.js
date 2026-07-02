@@ -10,8 +10,12 @@
 export const GRADES = ["again", "hard", "good", "easy"];
 const MIN_EASE = 1.3;
 
+// Local calendar date — the study "day" flips at the user's midnight, not
+// UTC's (an evening session must count toward today, or streaks misfire).
 export function todayStr(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${m}-${d}`;
 }
 
 export function addDays(dateStr, n) {
@@ -26,6 +30,14 @@ export function newCard(today) {
 
 export function isDue(card, today) {
   return !card || card.due <= today;
+}
+
+// A card is "known" (mature, in Anki terms) once its interval clears ~3 weeks
+// — used by the dashboard's standing stats, not by scheduling.
+export const MATURE_INTERVAL = 21;
+
+export function isMature(card) {
+  return !!card && card.interval >= MATURE_INTERVAL;
 }
 
 // Returns a NEW card; never mutates the input.

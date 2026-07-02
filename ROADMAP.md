@@ -91,6 +91,16 @@ diagrams; the platform features (timed exams, transcript, off-browser key) still
   CLRS max-flow network (a11l1), and the Gilbert–Lynch CAP execution (cloud
   c3l2). *Still open:* DP-table / matrix diagrams, and back-porting visuals to
   more units (Dijkstra graphs, BST rotations, quorum intersection).
+- ~~**Motivation layer**~~ — **done** (2026-07-01): a study **streak** with one
+  auto grace day per calendar month (two consecutive misses always break), a
+  **daily goal** (clear due reviews + finish a lesson or take a gate), a
+  26-week **consistency heatmap**, cross-course **standing stats** (units ·
+  lessons · cards known · study days), and per-course "next gate → unlocks X"
+  lines. Engine: `src/lib/streak.js` (pure, clock-injected, tested in
+  `test/streak.test.js`); actions become streak fuel only where progress is
+  actually persisted (`state/activity.js`). Fix along the way: `todayStr()` now
+  uses the LOCAL calendar day — it was UTC, so evening study counted as
+  tomorrow. *Still open:* the scheduled daily nudge (deferred by choice).
 - **Interactive visualizers** — animate BFS / Dijkstra / DP fills (bigger lift).
 - **Timed-exam mode** + a **cross-course transcript / GPA**.
 - **Move the API key off the browser** (a small local proxy).

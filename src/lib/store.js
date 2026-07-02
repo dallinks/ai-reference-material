@@ -1,4 +1,5 @@
-// Local-first persistence. One versioned blob in localStorage keyed by course.
+// Local-first persistence. One versioned blob in localStorage: progress keyed
+// by course, plus one cross-course activity log (the streak's raw material).
 // Swappable: every read/write goes through here, so moving to IndexedDB or a
 // synced backend later touches only this file.
 //
@@ -8,6 +9,10 @@
 //     mastery: { [unitId]: { score, passedAt } },      // best mastery-check result
 //     srs: { [itemId]: card },                          // see lib/srs.js
 //   }
+//
+// Activity log shape: see lib/streak.js.
+
+import { emptyActivity } from "./streak.js";
 
 const KEY = "crucible-v1";
 
@@ -46,5 +51,15 @@ export function loadAllProgress() {
 export function resetCourse(courseId) {
   const data = readAll();
   delete data.courses[courseId];
+  writeAll(data);
+}
+
+export function loadActivity() {
+  return readAll().activity || emptyActivity();
+}
+
+export function saveActivity(activity) {
+  const data = readAll();
+  data.activity = activity;
   writeAll(data);
 }
