@@ -1,7 +1,13 @@
 # Crucible — Roadmap
 
-Backlog of future work, kept with the content. Current courses: `algorithms`
-(9 units, graduate) and `probability` (2-unit seed/demo).
+Backlog of future work, kept with the content. Current courses (7): `algorithms`
+(13 units), `entrepreneurship` (9), `cloud` (9), `langgraph` (9),
+`ai-implementation` (9), `technical-interviews` (13), and `probability` (2-unit
+seed/demo). `technical-interviews` is the capstone — it reuses and cross-links
+the complexity/DP (`algorithms`), CAP/quorum/consistent-hashing/availability
+(`cloud`), and vesting/equity (`entrepreneurship`) spines. Future: deepen the
+probability seed; per-unit deepening of `technical-interviews` (more diagrams,
+more `proof`/`open` gate questions) toward the algorithms gold standard.
 
 ---
 
