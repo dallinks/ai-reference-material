@@ -178,6 +178,47 @@ export const technicalInterviews = {
               "body": "Take p = 0.30 (30% of people who reach the onsite are truly above the bar), a = 0.80, b = 0.20.\n\n P(strong | pass) = (0.80·0.30) / (0.80·0.30 + 0.20·0.70) = 0.24 / (0.24 + 0.14) = 0.24/0.38 ≈ **0.63**.\n\nSo a single pass only makes it ~63% likely you were truly above the bar — which is why they run multiple loops and a hiring committee (each independent pass multiplies the evidence upward). Meanwhile the strong-candidate rejection rate is 1 − a = **20%**: one in five strong candidates is turned away at this stage regardless of p. Aggregate that across a 4-round onsite where you must clear several bars, and false negatives become common — not a sign of low θ."
             },
             {
+              "type": "diagram",
+              "kind": "graph",
+              "height": 260,
+              "caption": "The signal-detection quadrants. Rows = truth (strong on top, weak below); columns = decision (reject on the left, pass on the right). A strict bar raises the threshold to shrink False Alarms (bad hires) — at the cost of more Misses (strong candidates rejected). That trade is the ROC curve.",
+              "nodes": [
+                {
+                  "id": "miss",
+                  "label": "Miss",
+                  "x": 30,
+                  "y": 28,
+                  "tone": "ember",
+                  "sub": "strong · reject (FN)"
+                },
+                {
+                  "id": "hit",
+                  "label": "Hit",
+                  "x": 70,
+                  "y": 28,
+                  "tone": "sage",
+                  "sub": "strong · pass"
+                },
+                {
+                  "id": "cr",
+                  "label": "CR",
+                  "x": 30,
+                  "y": 72,
+                  "tone": "muted",
+                  "sub": "weak · reject"
+                },
+                {
+                  "id": "fa",
+                  "label": "FA",
+                  "x": 70,
+                  "y": 72,
+                  "tone": "rust",
+                  "sub": "weak · pass (FP)"
+                }
+              ],
+              "edges": []
+            },
+            {
               "type": "callout",
               "tone": "warn",
               "body": "**Do not read a rejection as a measurement of your worth.** The process is engineered to reject strong candidates rather than risk a bad hire, so P(reject | strong) is structurally high. The correct inference from one rejection is a small downward nudge on θ̂ plus large residual uncertainty — which prescribes *more independent attempts*, not withdrawal. (The exact 'how many attempts' is Unit 2.)"
@@ -1355,6 +1396,71 @@ export const technicalInterviews = {
               "name": "Two-pointer pair-sum correctness",
               "statement": "Given a sorted array a and target t, the converging two-pointer scan (lo=0, hi=n−1; if a[lo]+a[hi] < t advance lo, if > t retreat hi, if = t report) finds a valid pair iff one exists.",
               "proof": "Loop invariant: no pair (i, j) with i < lo or j > hi sums to t and has been skipped incorrectly. Consider a step where a[lo] + a[hi] < t. For every j ≤ hi, a[lo] + a[j] ≤ a[lo] + a[hi] < t (sortedness), so a[lo] pairs with *nothing* in the remaining range to reach t; advancing lo discards only pairs that cannot be solutions, preserving the invariant. Symmetrically, if a[lo] + a[hi] > t, then a[hi] paired with any a[i], i ≥ lo, exceeds t, so retreating hi is safe. Each step discards one element that provably belongs to no solution, so if a solution exists the pointers meet it before crossing; if none exists the pointers cross having correctly excluded everything. ∎\n\nThe engine is the exchange argument: order guarantees the discarded pointer participates in no solution, which is exactly why the same idea fails on *unsorted* input."
+            },
+            {
+              "type": "diagram",
+              "kind": "graph",
+              "directed": true,
+              "height": 190,
+              "caption": "Two pointers on a sorted array for target 13: a[lo]+a[hi] = 2+15 = 17 > 13 → move hi left; 2+11 = 13 → found. Sortedness guarantees the pointer you move discards no possible solution (the exchange argument) — one pass, O(n).",
+              "nodes": [
+                {
+                  "id": "n0",
+                  "label": "2",
+                  "x": 10,
+                  "y": 50,
+                  "tone": "sage",
+                  "sub": "lo"
+                },
+                {
+                  "id": "n1",
+                  "label": "3",
+                  "x": 26,
+                  "y": 50
+                },
+                {
+                  "id": "n2",
+                  "label": "5",
+                  "x": 42,
+                  "y": 50
+                },
+                {
+                  "id": "n3",
+                  "label": "8",
+                  "x": 58,
+                  "y": 50
+                },
+                {
+                  "id": "n4",
+                  "label": "11",
+                  "x": 74,
+                  "y": 50
+                },
+                {
+                  "id": "n5",
+                  "label": "15",
+                  "x": 90,
+                  "y": 50,
+                  "tone": "gold",
+                  "sub": "hi"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "n0",
+                  "to": "n1",
+                  "label": "lo → if sum<t",
+                  "directed": true,
+                  "tone": "sage"
+                },
+                {
+                  "from": "n5",
+                  "to": "n4",
+                  "label": "hi ← if sum>t",
+                  "directed": true,
+                  "tone": "gold"
+                }
+              ]
             },
             {
               "type": "theorem",
@@ -2848,6 +2954,74 @@ export const technicalInterviews = {
               "body": "Inputs: 100 M DAU; each uploads ~2 photos/day; average photo 1.5 MB; reads (views) outnumber uploads ~100:1; keep photos ~5 years; replication 3×.\n\n**Upload QPS:** 100M × 2 / 86,400 ≈ 2.3M/86,400 ≈ **~2,300 QPS** avg; peak ×3 ≈ **~7,000 QPS**.\n**Read QPS:** 100:1 → ~230,000 QPS avg; peak ≈ **~700,000 QPS** — clearly needs a CDN + caching, not a database read per view.\n**Storage/day:** 200M photos × 1.5 MB × 3 (replication) ≈ **~900 TB/day**. Over 5 years ≈ 900 TB × 365 × 5 ≈ **~1.6 EB** — object storage, sharded; never a single DB.\n**Read bandwidth:** 230,000 QPS × 1.5 MB ≈ **~345 GB/s** egress — a CDN is mandatory; origin servers can't serve that.\n**Concurrency (uploads):** L = 7,000 QPS × 0.2 s ≈ **1,400** concurrent uploads in flight.\n\nEvery one of these numbers dictates a design choice: the read QPS and bandwidth force a CDN; the storage forces object stores + sharding; the write QPS is modest enough for a partitioned write path with a queue. The estimation *is* the argument for the architecture."
             },
             {
+              "type": "diagram",
+              "kind": "graph",
+              "directed": true,
+              "height": 240,
+              "caption": "From one input (DAU) the whole capacity plan follows: QPS = DAU × actions/day ÷ 86,400, then storage, egress bandwidth, and concurrency (Little's Law) each branch off QPS. The arithmetic is the argument for the architecture.",
+              "nodes": [
+                {
+                  "id": "dau",
+                  "label": "DAU",
+                  "x": 8,
+                  "y": 50,
+                  "tone": "sage"
+                },
+                {
+                  "id": "qps",
+                  "label": "QPS",
+                  "x": 34,
+                  "y": 50,
+                  "tone": "gold",
+                  "sub": "÷ 86,400"
+                },
+                {
+                  "id": "store",
+                  "label": "Storage",
+                  "x": 74,
+                  "y": 18,
+                  "sub": "× size × repl"
+                },
+                {
+                  "id": "band",
+                  "label": "Egress",
+                  "x": 74,
+                  "y": 50,
+                  "sub": "QPS × payload"
+                },
+                {
+                  "id": "conc",
+                  "label": "In-flight",
+                  "x": 74,
+                  "y": 82,
+                  "sub": "L = λ·W"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "dau",
+                  "to": "qps",
+                  "label": "× actions/day",
+                  "directed": true
+                },
+                {
+                  "from": "qps",
+                  "to": "store",
+                  "directed": true
+                },
+                {
+                  "from": "qps",
+                  "to": "band",
+                  "directed": true
+                },
+                {
+                  "from": "qps",
+                  "to": "conc",
+                  "directed": true
+                }
+              ]
+            },
+            {
               "type": "callout",
               "tone": "info",
               "body": "**Round to powers of ten and keep units explicit.** 86,400 → ~10⁵; a day ≈ 10⁵ s; a month ≈ 2.5×10⁶ s; 1 KB×1 M = 1 GB; 1 KB×1 B = 1 TB. Carry units through every step (QPS × bytes = bytes/s) so a slipped factor of 1000 is caught. Interviewers grade the *method and the order of magnitude*, not the third significant figure."
@@ -3192,6 +3366,55 @@ export const technicalInterviews = {
               "name": "Quorum reads and writes give strong consistency",
               "statement": "In a replicated store with N replicas, if every write must be acknowledged by W replicas and every read must query R replicas, then choosing R + W > N guarantees that any read quorum overlaps every write quorum in at least one replica — so a read always sees the latest acknowledged write.",
               "proof": "A write is acknowledged only after being stored on some set A of W replicas; a read gathers responses from some set B of R replicas. Both A and B are subsets of the same N replicas, so by inclusion–exclusion |A ∩ B| ≥ |A| + |B| − N = W + R − N. If R + W > N then |A ∩ B| ≥ W + R − N ≥ 1, so the read set B contains at least one replica that acknowledged the latest write and holds its value (with version metadata to pick the newest). Hence the read observes the most recent acknowledged write — strong consistency for that value. ∎\n\nCommon tunings: W = N, R = 1 (fast reads, slow/less-available writes) or W = R = ⌈(N+1)/2⌉ (majority quorums, balanced). This is the Dynamo-style knob (cloud course, quorum unit); citing 'R + W > N for read-your-writes' is precise consistency signal."
+            },
+            {
+              "type": "diagram",
+              "kind": "graph",
+              "height": 170,
+              "caption": "N = 5 replicas. A write reaches W = 3 (N₁–N₃); a read queries R = 3 (N₃–N₅). Because R + W = 6 > 5, the quorums MUST overlap — here at N₃ — so every read sees at least one replica holding the latest write (|A∩B| ≥ R+W−N = 1).",
+              "nodes": [
+                {
+                  "id": "r1",
+                  "label": "N₁",
+                  "x": 12,
+                  "y": 50,
+                  "tone": "sage",
+                  "sub": "W"
+                },
+                {
+                  "id": "r2",
+                  "label": "N₂",
+                  "x": 31,
+                  "y": 50,
+                  "tone": "sage",
+                  "sub": "W"
+                },
+                {
+                  "id": "r3",
+                  "label": "N₃",
+                  "x": 50,
+                  "y": 50,
+                  "tone": "gold",
+                  "sub": "W∩R"
+                },
+                {
+                  "id": "r4",
+                  "label": "N₄",
+                  "x": 69,
+                  "y": 50,
+                  "tone": "ember",
+                  "sub": "R"
+                },
+                {
+                  "id": "r5",
+                  "label": "N₅",
+                  "x": 88,
+                  "y": 50,
+                  "tone": "ember",
+                  "sub": "R"
+                }
+              ],
+              "edges": []
             },
             {
               "type": "theorem",
@@ -3664,6 +3887,75 @@ export const technicalInterviews = {
               "proof": "Series: the request succeeds iff every component is up; by independence the probability all are up is the product ∏ aᵢ. Since each aᵢ ≤ 1, multiplying more factors ≤ 1 can only shrink the product, so ∏ aᵢ ≤ min aᵢ — a chain is less available than its weakest link, and every added dependency lowers availability. Redundancy: k independent replicas of the component are all down with probability ∏ (1 − a) = (1 − a)ᵏ (independence), so at least one is up with probability 1 − (1 − a)ᵏ ≥ a, increasing toward 1 as k grows. ∎\n\nConsequences you can state: adding dependencies on the critical path erodes availability multiplicatively (five 99.9% services in series give 0.999⁵ ≈ 99.5%), so minimize serial hops; and eliminate single points of failure by replicating them (two 99% replicas give 1 − 0.01² = 99.99%). This is the `cloud` course's availability algebra applied to your own diagram."
             },
             {
+              "type": "diagram",
+              "kind": "graph",
+              "directed": true,
+              "height": 220,
+              "caption": "Series dependencies multiply, so the chain is only as available as the product (≤ the weakest link) — minimize serial hops. A single point of failure is fixed by redundancy: two independent DB replicas give 1−(1−0.999)² ≈ 99.9999%, so the DB stops being the weak link.",
+              "nodes": [
+                {
+                  "id": "cl",
+                  "label": "Client",
+                  "x": 6,
+                  "y": 50,
+                  "tone": "sage"
+                },
+                {
+                  "id": "lb",
+                  "label": "LB",
+                  "x": 28,
+                  "y": 50,
+                  "sub": "99.99%"
+                },
+                {
+                  "id": "app",
+                  "label": "App",
+                  "x": 50,
+                  "y": 50,
+                  "sub": "99.9%"
+                },
+                {
+                  "id": "db1",
+                  "label": "DB₁",
+                  "x": 80,
+                  "y": 28,
+                  "tone": "gold",
+                  "sub": "99.9%"
+                },
+                {
+                  "id": "db2",
+                  "label": "DB₂",
+                  "x": 80,
+                  "y": 72,
+                  "tone": "gold",
+                  "sub": "99.9%"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "cl",
+                  "to": "lb",
+                  "directed": true
+                },
+                {
+                  "from": "lb",
+                  "to": "app",
+                  "directed": true
+                },
+                {
+                  "from": "app",
+                  "to": "db1",
+                  "directed": true,
+                  "label": "replicated"
+                },
+                {
+                  "from": "app",
+                  "to": "db2",
+                  "directed": true
+                }
+              ]
+            },
+            {
               "type": "theorem",
               "kind": "definition",
               "name": "The cost of nines",
@@ -3887,6 +4179,106 @@ export const technicalInterviews = {
               "kind": "definition",
               "name": "The story bank as a covering set",
               "statement": "Let the competencies be a set C (ownership, conflict, ambiguity, impact, failure/growth, leadership, …). Build stories s₁, …, s_m where each sᵢ demonstrates a *subset* of C. The bank is **adequate** when the union of its stories' competencies covers C — every competency is demonstrable by at least one story — and **efficient** when a small number of stories achieves that cover (each strong story credibly hits 2–3 competencies). This is a set-cover: maximize competency coverage per story, so 6–10 well-chosen stories span the space and you're never caught without a relevant one."
+            },
+            {
+              "type": "diagram",
+              "kind": "graph",
+              "directed": true,
+              "height": 300,
+              "caption": "The story bank as a set-cover: a few multi-competency stories (left) whose coverage (edges) spans the whole competency set (right). Audit for gaps — every competency needs at least one incoming edge; here three stories cover all five.",
+              "nodes": [
+                {
+                  "id": "s1",
+                  "label": "S₁",
+                  "x": 16,
+                  "y": 22,
+                  "tone": "sage",
+                  "sub": "on-call fix"
+                },
+                {
+                  "id": "s2",
+                  "label": "S₂",
+                  "x": 16,
+                  "y": 50,
+                  "tone": "sage",
+                  "sub": "migration"
+                },
+                {
+                  "id": "s3",
+                  "label": "S₃",
+                  "x": 16,
+                  "y": 78,
+                  "tone": "sage",
+                  "sub": "outage"
+                },
+                {
+                  "id": "own",
+                  "label": "Own",
+                  "x": 85,
+                  "y": 12
+                },
+                {
+                  "id": "infl",
+                  "label": "Infl",
+                  "x": 85,
+                  "y": 34
+                },
+                {
+                  "id": "imp",
+                  "label": "Impact",
+                  "x": 85,
+                  "y": 56
+                },
+                {
+                  "id": "amb",
+                  "label": "Ambig",
+                  "x": 85,
+                  "y": 78
+                },
+                {
+                  "id": "fail",
+                  "label": "Fail",
+                  "x": 85,
+                  "y": 94
+                }
+              ],
+              "edges": [
+                {
+                  "from": "s1",
+                  "to": "own",
+                  "directed": true
+                },
+                {
+                  "from": "s1",
+                  "to": "infl",
+                  "directed": true
+                },
+                {
+                  "from": "s1",
+                  "to": "imp",
+                  "directed": true
+                },
+                {
+                  "from": "s2",
+                  "to": "own",
+                  "directed": true
+                },
+                {
+                  "from": "s2",
+                  "to": "amb",
+                  "directed": true
+                },
+                {
+                  "from": "s3",
+                  "to": "fail",
+                  "directed": true
+                },
+                {
+                  "from": "s3",
+                  "to": "imp",
+                  "directed": true
+                }
+              ]
             },
             {
               "type": "text",
@@ -4142,6 +4534,48 @@ export const technicalInterviews = {
               "name": "The expected value of negotiating is positive",
               "statement": "Let a professional counter-offer succeed (yield a raise Δ > 0) with probability p, and let q be the probability the offer is *rescinded* for negotiating, with loss L. The expected value of negotiating is E = p·Δ − q·L. Because offers are essentially never rescinded for a polite, professional negotiation (q ≈ 0), E ≈ p·Δ > 0 whenever there is any chance of a raise.",
               "proof": "By definition of expectation over the two outcomes (success vs rescission), E = p·Δ − q·L (other outcomes — a flat 'no, the offer stands' — contribute 0 change and are absorbed into 1 − p − q). Empirically and by the employer's own incentives, q ≈ 0: a company that has decided to hire you, run the whole expensive funnel, and extended an offer will not throw that away because you professionally asked for more — doing so would be irrational (re-opening the search costs far more than the delta) and is essentially unheard of for normal, respectful negotiation. With q ≈ 0, E ≈ p·Δ, and since p > 0 and Δ > 0, E > 0. ∎\n\nThe asymmetry is the whole point: the downside of a professional ask is ~0, the upside is a real, compounding raise (it also lifts future raises and offers, which are often percentages of the current number). So the default action is to negotiate; declining to is the choice that has negative expected value relative to asking."
+            },
+            {
+              "type": "diagram",
+              "kind": "graph",
+              "height": 150,
+              "caption": "The ZOPA is the overlap between the least you'll accept (your reservation, set by your BATNA) and the most they'll pay (theirs). A competing offer raises YOUR reservation, shrinking the ZOPA from the left and pushing the settlement toward their max — leverage moves you rightward.",
+              "nodes": [
+                {
+                  "id": "you",
+                  "label": "You",
+                  "x": 16,
+                  "y": 50,
+                  "tone": "sage",
+                  "sub": "min you accept"
+                },
+                {
+                  "id": "zopa",
+                  "label": "ZOPA",
+                  "x": 50,
+                  "y": 50,
+                  "tone": "gold",
+                  "sub": "the deal range"
+                },
+                {
+                  "id": "them",
+                  "label": "Them",
+                  "x": 84,
+                  "y": 50,
+                  "tone": "ember",
+                  "sub": "max they pay"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "you",
+                  "to": "zopa"
+                },
+                {
+                  "from": "zopa",
+                  "to": "them"
+                }
+              ]
             },
             {
               "type": "text",
@@ -4442,6 +4876,81 @@ export const technicalInterviews = {
               "kind": "definition",
               "name": "The eval-driven prep loop",
               "statement": "Prep as a closed loop: (1) **Build an eval set** — a representative list of problems/patterns and mock questions across the arcs. (2) **Attempt** under realistic conditions (timed, out loud). (3) **Log every failure** as a specific, labeled case ('failed to see the monotonic-predicate trigger,' 'blanked on the capacity estimation'). (4) **Turn each failure into a spaced-repetition card** so it resurfaces until mastered — the failure becomes a permanent test, exactly as in eval-driven development. (5) **Change one thing** (drill that pattern, re-derive that formula) and **re-attempt**, confirming the fix without regressions. Quality ratchets upward because fixed weaknesses can't silently return."
+            },
+            {
+              "type": "diagram",
+              "kind": "graph",
+              "directed": true,
+              "height": 380,
+              "caption": "Prep as an eval-driven loop — the same discipline this app applies to recall. Every logged failure becomes a permanent spaced-repetition test, so fixed weaknesses can't silently return and quality ratchets upward.",
+              "nodes": [
+                {
+                  "id": "set",
+                  "label": "Eval set",
+                  "x": 50,
+                  "y": 16,
+                  "tone": "sage",
+                  "sub": "problems + mocks"
+                },
+                {
+                  "id": "att",
+                  "label": "Attempt",
+                  "x": 84,
+                  "y": 40,
+                  "sub": "timed, aloud"
+                },
+                {
+                  "id": "log",
+                  "label": "Log fail",
+                  "x": 71,
+                  "y": 78,
+                  "tone": "ember",
+                  "sub": "labeled case"
+                },
+                {
+                  "id": "card",
+                  "label": "Card it",
+                  "x": 29,
+                  "y": 78,
+                  "sub": "spaced-rep"
+                },
+                {
+                  "id": "chg",
+                  "label": "Change 1",
+                  "x": 16,
+                  "y": 40,
+                  "sub": "then re-test"
+                }
+              ],
+              "edges": [
+                {
+                  "from": "set",
+                  "to": "att",
+                  "directed": true
+                },
+                {
+                  "from": "att",
+                  "to": "log",
+                  "directed": true
+                },
+                {
+                  "from": "log",
+                  "to": "card",
+                  "directed": true
+                },
+                {
+                  "from": "card",
+                  "to": "chg",
+                  "directed": true
+                },
+                {
+                  "from": "chg",
+                  "to": "att",
+                  "directed": true,
+                  "tone": "gold",
+                  "label": "ratchet ↑"
+                }
+              ]
             },
             {
               "type": "text",

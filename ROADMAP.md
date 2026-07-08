@@ -6,8 +6,10 @@ Backlog of future work, kept with the content. Current courses (7): `algorithms`
 seed/demo). `technical-interviews` is the capstone — it reuses and cross-links
 the complexity/DP (`algorithms`), CAP/quorum/consistent-hashing/availability
 (`cloud`), and vesting/equity (`entrepreneurship`) spines. Future: deepen the
-probability seed; per-unit deepening of `technical-interviews` (more diagrams,
-more `proof`/`open` gate questions) toward the algorithms gold standard.
+probability seed. `technical-interviews` got a diagram pass (14 diagrams across
+12/13 units); toward the algorithms gold standard it still wants more worked
+examples, exercises, and `proof`/`open` gate questions per unit (a full content
+re-sweep).
 
 ---
 

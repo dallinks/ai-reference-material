@@ -185,12 +185,36 @@ A `proof` question is graded by Claude against your `rubric` and `solution`
 
 ---
 
+## Depth floors (ENFORCED — `npm run validate` fails without them)
+
+Prose promises produced screen-sized "15-minute lessons", so the floors are now
+code (`DEPTH` in `src/lib/schema.js`). Every **lesson** must have:
+
+| floor | value |
+|---|---|
+| content words | ≥ 1,200 |
+| study-words vs claim | words + 250×(exercise items) ≥ `estMinutes` × 90 |
+| content blocks | ≥ 8 |
+| words per `text` block | ≥ 40 (no bullet-point "exposition") |
+| `theorem`/`definition` blocks | ≥ 1 (formalize what you teach) |
+| worked instances (`example`+`code`) | ≥ 2 |
+| `exercises` blocks | ≥ 1, each with ≥ 3 problems |
+| review cards | 3–6 |
+
+And every **unit's mastery check**: ≥ 4 questions, ≤ half `mcq`, an
+`explanation` on every question, `proof`/`open` rubrics with ≥ 3 criteria,
+`masteryThreshold` ≥ 0.8.
+
+The study-words rule cuts both ways: state an honest `estMinutes`. Deepen the
+lesson or lower the claim — the validator accepts either, and also warns when
+the claim *undersells* long content (> 300 implied wpm).
+
 ## Rigor rules (what makes a gate real)
 
 These are non-negotiable if "mastery" is to mean anything:
 
 1. **Prefer `numeric` and `short` over `mcq`.** Multiple choice is guessable; a
-   gate built only from `mcq` is theater. Aim for at least half non-MCQ.
+   gate built only from `mcq` is theater. At least half non-MCQ (enforced).
 2. **Mastery checks test transfer, not recall.** Questions should require *applying*
    the unit to a new case, not restating a definition. (Put the recall in
    `reviewItems` instead.)
@@ -198,8 +222,8 @@ These are non-negotiable if "mastery" is to mean anything:
    the front, crisp answer on the back. These are what spaced repetition keeps alive.
 4. **One concept per review card.** No "list all five…" cards; split them.
 5. **MCQ distractors must be plausible** — each wrong option should reflect a real
-   misconception, with the fix in the `explanation`.
-6. **Threshold ≥ 0.8.** Lower than that isn't a gate.
+   misconception, with the fix in the `explanation` (explanations are enforced).
+6. **Threshold ≥ 0.8.** Lower than that isn't a gate (enforced).
 
 ## Source-grounding
 
@@ -210,24 +234,44 @@ These are non-negotiable if "mastery" is to mean anything:
 
 ---
 
-## Generation prompt (hand this to Claude)
+## Generation process (one unit per pass — this is the depth mechanism)
 
-> Generate a Crucible course on **<TOPIC>** at **<LEVEL>** difficulty, grounded in
-> the source material I'm providing (or, if none: standard canonical treatments,
-> listed honestly in `sources`).
+A whole course generated in one shot comes out thin: the model rations its
+output budget across 25+ lessons and every one lands at a third of textbook
+depth. The audit that motivated the depth floors showed exactly this signature —
+one-shot courses at ~760 median words/lesson vs ~1,850 for unit-by-unit ones.
+
+So: **never generate more than one unit per pass.**
+
+1. Pass 0 — outline only: course object with `id`/`title`/`sources`, unit list
+   with titles + summaries, no lessons.
+2. Pass N — write ONE unit completely to the depth floors above. Budget
+   ~1,600–2,500 words per lesson. If a lesson can't reach 1,200 words without
+   padding, its topic is too small — merge it; if it sprawls, split it.
+3. Run `npm run validate -- <course-id>` after every pass. Fix errors before
+   generating the next unit. Never lower `estMinutes` merely to pass — first ask
+   whether the content is actually complete.
+
+## Generation prompt (hand this to Claude, once per unit)
+
+> We are building a Crucible course on **<TOPIC>** at **<LEVEL>** difficulty,
+> grounded in the source material I'm providing (or, if none: standard canonical
+> treatments, listed honestly in `sources`). Here is the outline and the units
+> written so far: <PASTE>.
 >
-> Output a single JS module exactly matching `crucible/AUTHORING.md`:
-> `export const <id> = { ... }`. Follow every rigor rule. Specifically:
-> - <N> units, each building on the last, each with 3–5 lessons.
-> - **Each lesson is a full textbook section**, not a summary: 8–14 content blocks
->   developing the topic — motivation, formal `definition`s, the key results as
->   `theorem` blocks *with inline proofs*, 3–6 worked `example`s, and a closing
->   `exercises` set (3–6 problems with worked solutions). Plus 4–6 atomic review
->   cards. If a lesson sprawls past one coherent topic, split it.
-> - Each unit: a mastery check of 4–6 questions that test *application*, at least
->   half `numeric`/`short`, threshold 0.85, every question with an `explanation`.
+> Write **unit <K> only**, exactly matching `crucible/AUTHORING.md`. Follow every
+> rigor rule and every depth floor (they are machine-enforced). Specifically:
+> - 3–5 lessons, each a **full textbook section**, not a summary: 8–14 content
+>   blocks and ≥ 1,200 words (target 1,600–2,500) — motivation, formal
+>   `definition`s, the key results as `theorem` blocks *with inline proofs*, 2+
+>   worked `example`s, and a closing `exercises` set (3–6 problems with worked
+>   solutions). Plus 3–6 atomic review cards. An honest `estMinutes` backed by
+>   the content (≥ 90 study-wpm).
+> - A mastery check of 4–6 questions that test *application*, at least half
+>   non-`mcq`, threshold 0.85, every question with an `explanation`,
+>   `proof`/`open` rubrics with 3+ independently checkable criteria.
 > - Faithful notation; worked examples adapted from canonical problems over
 >   invented ones; **prove the results you rely on** rather than asserting them.
 >
-> Before finishing, mentally run it against the schema. Then I'll drop it in
-> `src/data/courses/`, register it in `src/data/index.js`, and run `npm run validate`.
+> Then I'll splice it into `src/data/courses/<id>.js` and run
+> `npm run validate -- <id>` — it must pass with zero errors.

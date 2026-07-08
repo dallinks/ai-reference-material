@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "validate": "node scripts/validate-course.mjs",
+    "review": "node scripts/review-course.mjs",
     "test": "node --test"
   },
   "dependencies": {
