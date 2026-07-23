@@ -9,8 +9,9 @@ import { cloud } from "./courses/cloud-architecture.js";
 import { langgraph } from "./courses/langgraph.js";
 import { aiImplementation } from "./courses/ai-implementation.js";
 import { technicalInterviews } from "./courses/technical-interviews.js";
+import { react } from "./courses/react.js";
 
-export const COURSES = [algorithms, entrepreneurship, cloud, langgraph, aiImplementation, technicalInterviews, probability];
+export const COURSES = [algorithms, entrepreneurship, cloud, langgraph, aiImplementation, technicalInterviews, react, probability];
 
 export function getCourse(id) {
   return COURSES.find((c) => c.id === id) || null;
